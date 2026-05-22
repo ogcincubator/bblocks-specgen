@@ -249,7 +249,15 @@ class Loader:
         depends_on = []
         for dep in req_data.get('depends-on', []):
             if 'uri' in dep:
-                depends_on.append(Dependency(uri=dep['uri'], title=dep.get('title')))
+                raw_uri = dep['uri']
+                if raw_uri.startswith('bblocks://'):
+                    identifier = raw_uri[len('bblocks://'):]
+                    dep_bb = resolver.get_bblock(identifier)
+                    title = dep.get('title') or (dep_bb['name'] if dep_bb else identifier)
+                    resolved_uri = resolver.resolve_bblocks_link(identifier)
+                    depends_on.append(Dependency(uri=resolved_uri, title=title))
+                else:
+                    depends_on.append(Dependency(uri=raw_uri, title=dep.get('title')))
             elif 'bblock' in dep:
                 dep_bb = resolver.get_bblock(dep['bblock'])
                 dep_name = dep_bb['name'] if dep_bb else dep['bblock']
