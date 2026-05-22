@@ -287,12 +287,14 @@ class Loader:
                 applies_to=applies_to,
                 tested_by=req_entry.get('tested-by', []),
                 note=req_entry.get('note'),
+                import_examples=int(req_entry.get('import-examples', 0)),
             )
             # Resolve tested-by to actual TestResource objects
             req.test_resources = resolver.resolve_tested_by(req.tested_by, test_resources)
             requirements.append(req)
 
         examples = self._load_examples(bb, resolver)
+        examples += self._load_imported_examples(requirements, resolver)
 
         return ReqClass(
             bblock_id=bb['itemIdentifier'],
@@ -335,6 +337,54 @@ class Loader:
                 snippets=snippets,
             ))
         return examples
+
+    def _load_imported_examples(self, requirements: list, resolver: Resolver) -> list[Example]:
+        """
+        For each requirement with import-examples > 0 and an applies-to bblock,
+        fetch up to that many examples from the bblock's json-full.
+        Each source bblock is fetched at most once; results are deduplicated by bblock.
+        """
+        import json as _json
+        seen_bblocks: set[str] = set()
+        result: list[Example] = []
+
+        for req in requirements:
+            if not req.import_examples or not req.applies_to:
+                continue
+            identifier = req.applies_to.bblock
+            if identifier in seen_bblocks:
+                continue
+            seen_bblocks.add(identifier)
+
+            bb = resolver.get_bblock(identifier)
+            if not bb:
+                logger.warning("import-examples: bblock not found: %s", identifier)
+                continue
+
+            json_full_url = bb.get('documentation', {}).get('json-full', {}).get('url')
+            if not json_full_url:
+                logger.debug("import-examples: no json-full for %s", identifier)
+                continue
+
+            try:
+                full = _json.loads(resolver.fetch(json_full_url))
+            except Exception as e:
+                logger.warning("import-examples: could not fetch json-full for %s: %s", identifier, e)
+                continue
+
+            for ex in full.get('examples', [])[:req.import_examples]:
+                snippets = [
+                    Snippet(language=s.get('language', 'text'), code=s.get('code', ''))
+                    for s in ex.get('snippets', [])
+                    if s.get('code')
+                ]
+                result.append(Example(
+                    title=ex.get('title'),
+                    content=ex.get('content', ''),
+                    snippets=snippets,
+                ))
+
+        return result
 
     # ------------------------------------------------------------------
     # Annex A generation
