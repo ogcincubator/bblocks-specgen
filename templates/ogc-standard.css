@@ -1,0 +1,217 @@
+/* OGC Standard stylesheet — bblocks-specgen PoC */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: "Georgia", "Times New Roman", serif;
+  font-size: 16px;
+  line-height: 1.6;
+  color: #111;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 2rem 4rem;
+}
+
+/* ---- Cover ---- */
+#cover {
+  border-bottom: 3px solid #003366;
+  padding-bottom: 2rem;
+  margin-bottom: 3rem;
+}
+#cover h1 { font-size: 1.8rem; color: #003366; margin-bottom: 0.25rem; }
+#cover .doc-meta { font-size: 0.9rem; color: #555; margin-bottom: 1rem; }
+#cover .doc-meta span { margin-right: 1.5rem; }
+#cover .doc-abstract { margin-top: 1.5rem; font-style: italic; }
+#cover .editors-table th { text-align: left; padding-right: 2rem; }
+
+/* ---- ToC ---- */
+#toc { border: 1px solid #ccc; padding: 1rem 1.5rem; margin-bottom: 3rem; background: #fafafa; }
+#toc h2 { font-size: 1rem; margin-top: 0; color: #003366; text-transform: uppercase; letter-spacing: 0.05em; }
+#toc ul { margin: 0; padding-left: 1.5rem; list-style: none; }
+#toc li { margin: 0.2rem 0; }
+#toc a { color: #003366; text-decoration: none; }
+#toc a:hover { text-decoration: underline; }
+
+/* ---- Headings ---- */
+h1, h2, h3, h4 { color: #003366; font-family: "Arial", sans-serif; }
+h2 { border-bottom: 1px solid #003366; padding-bottom: 0.2rem; margin-top: 2.5rem; }
+h3 { margin-top: 1.8rem; }
+
+section { margin-bottom: 2rem; }
+section.annex h2::before { content: "Annex "; }
+
+/* ---- Conformance class box ---- */
+.req-class-box {
+  border: 2px solid #003366;
+  border-radius: 4px;
+  padding: 1rem 1.2rem;
+  margin: 1.5rem 0;
+  background: #f0f4fa;
+}
+.req-class-box h4 { margin: 0 0 0.6rem; color: #003366; font-size: 1rem; }
+.req-class-box table { font-size: 0.9rem; border-collapse: collapse; width: 100%; }
+.req-class-box td, .req-class-box th { padding: 0.25rem 0.5rem; vertical-align: top; }
+.req-class-box th { color: #555; font-weight: normal; white-space: nowrap; width: 12rem; }
+.req-class-box a { color: #003366; word-break: break-all; }
+
+/* ---- Requirement boxes ---- */
+.requirement {
+  border-left: 4px solid #888;
+  border-radius: 0 4px 4px 0;
+  padding: 0.8rem 1rem;
+  margin: 1.2rem 0;
+  background: #fff8f0;
+}
+.requirement.req-level-SHALL  { border-color: #c0392b; background: #fff5f5; }
+.requirement.req-level-SHOULD { border-color: #e67e22; background: #fff9f0; }
+.requirement.req-level-MAY    { border-color: #27ae60; background: #f0fff5; }
+
+.req-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+.req-number { font-weight: bold; font-family: Arial, sans-serif; font-size: 0.85rem; color: #555; }
+.req-uri { font-family: monospace; font-size: 0.8rem; color: #555; word-break: break-all; }
+.req-uri a { color: #555; text-decoration: none; }
+.req-uri a:hover { text-decoration: underline; }
+
+.req-level {
+  font-family: Arial, sans-serif;
+  font-size: 0.75rem;
+  font-weight: bold;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.req-level-SHALL  .req-level { background: #c0392b; color: white; }
+.req-level-SHOULD .req-level { background: #e67e22; color: white; }
+.req-level-MAY    .req-level { background: #27ae60; color: white; }
+
+.req-condition { font-style: italic; color: #555; margin-bottom: 0.4rem; font-size: 0.95rem; }
+.req-condition::before { content: "Condition: "; font-weight: bold; }
+
+.req-statement { margin-bottom: 0.4rem; }
+
+.req-applies-to { font-size: 0.85rem; color: #555; margin-top: 0.4rem; }
+.req-applies-to a { color: #003366; }
+
+.editor-note {
+  border: 1px solid #e67e22;
+  background: #fff9f0;
+  border-radius: 4px;
+  padding: 0.6rem 0.9rem;
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+}
+.editor-note::before { content: "Editor's note: "; font-weight: bold; color: #e67e22; }
+body[data-status="Published"] .editor-note { display: none; }
+
+/* ---- Conformance clause ---- */
+.conformance-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+.conformance-table th { background: #003366; color: white; padding: 0.5rem 0.8rem; text-align: left; font-family: Arial, sans-serif; font-size: 0.9rem; }
+.conformance-table td { padding: 0.4rem 0.8rem; border-bottom: 1px solid #ddd; font-size: 0.9rem; vertical-align: top; }
+.conformance-table td a { color: #003366; word-break: break-all; }
+.conformance-table tr:nth-child(even) td { background: #f7f9fc; }
+
+/* ---- Terms ---- */
+.term-entry { margin-bottom: 1.2rem; }
+.term-entry .term-name { font-weight: bold; }
+.term-entry .term-source { font-size: 0.85rem; color: #555; }
+.abbreviated-terms table { border-collapse: collapse; }
+.abbreviated-terms td { padding: 0.2rem 1.5rem 0.2rem 0; }
+
+/* ---- References ---- */
+.reference-entry { margin-bottom: 0.8rem; display: flex; gap: 1rem; }
+.reference-entry .ref-id { font-weight: bold; white-space: nowrap; min-width: 10rem; }
+.reference-entry .ref-body { flex: 1; }
+.reference-entry a { color: #003366; }
+
+/* ---- ATS ---- */
+.ats-entry {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  margin: 1.2rem 0;
+  overflow: hidden;
+}
+.ats-entry .ats-header {
+  background: #003366;
+  color: white;
+  padding: 0.5rem 0.8rem;
+  font-family: monospace;
+  font-size: 0.85rem;
+}
+.ats-entry table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.ats-entry td { padding: 0.4rem 0.8rem; border-bottom: 1px solid #eee; vertical-align: top; }
+.ats-entry td:first-child { font-weight: bold; color: #555; white-space: nowrap; width: 10rem; }
+.ats-entry a { color: #003366; }
+.ats-entry .test-resource { font-family: monospace; font-size: 0.8rem; display: block; }
+.ats-entry .test-resource.require-fail { color: #c0392b; }
+.ats-entry .test-resource.require-fail::after { content: " (expected to fail)"; }
+
+/* ---- ToC nested ---- */
+#toc ul ul {
+  margin: 0.1rem 0 0.1rem 1.2rem;
+  font-size: 0.9em;
+}
+
+/* ---- Property table (inside req boxes) ---- */
+.property-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin-top: 0.8rem;
+}
+.property-table thead th {
+  background: #e8f0f8;
+  padding: 0.3rem 0.6rem;
+  text-align: left;
+  font-weight: bold;
+  border-bottom: 2px solid #b0c8e8;
+}
+.property-table tbody td {
+  padding: 0.3rem 0.6rem;
+  border-bottom: 1px solid #dde8f4;
+  vertical-align: top;
+}
+.property-table tbody tr:last-child td { border-bottom: none; }
+.property-table a.schema-ref { font-size: 0.8em; color: #4a7ab5; }
+
+/* ---- Examples ---- */
+.examples-section { margin-top: 2rem; }
+.example {
+  border: 1px solid #c8dff8;
+  border-left: 4px solid #4a90d9;
+  border-radius: 4px;
+  padding: 1rem 1.2rem;
+  margin: 1rem 0;
+  background: #f7fbff;
+}
+.example-title {
+  font-size: 0.95rem;
+  font-weight: bold;
+  color: #1a3f6f;
+  margin: 0 0 0.5rem;
+}
+.example pre { margin: 0.5rem 0 0; }
+
+/* ---- Code blocks ---- */
+code { font-family: monospace; font-size: 0.9em; background: #f4f4f4; padding: 0.1em 0.3em; border-radius: 2px; }
+pre { background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto; }
+pre code { background: none; padding: 0; }
+
+/* ---- Misc ---- */
+table { border-collapse: collapse; }
+a { color: #003366; }
+hr { border: none; border-top: 1px solid #ddd; margin: 2rem 0; }
+
+footer {
+  border-top: 1px solid #ccc;
+  padding-top: 1rem;
+  margin-top: 4rem;
+  font-size: 0.85rem;
+  color: #777;
+  text-align: center;
+}
