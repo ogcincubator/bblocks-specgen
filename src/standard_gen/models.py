@@ -29,6 +29,7 @@ class Requirement:
     note: Optional[str] = None
     test_resources: list[TestResource] = field(default_factory=list)
     import_examples: int = 0
+    examples: list['Example'] = field(default_factory=list)
 
     @property
     def id_slug(self) -> str:

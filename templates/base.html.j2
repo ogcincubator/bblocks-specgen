@@ -265,6 +265,19 @@
       {% if req.note %}
       <div class="editor-note">{{ req.note }}</div>
       {% endif %}
+      {% if req.examples %}
+      <div class="req-examples">
+        {% for example in req.examples %}
+        <div class="example">
+          <h5 class="example-title">{{ example.title or 'Example' }}</h5>
+          {% if example.content %}{{ render_markdown(example.content) | safe }}{% endif %}
+          {% for snippet in example.snippets %}
+          <pre><code class="language-{{ snippet.language }}">{{ snippet.code | e }}</code></pre>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
     {% endfor %}
 
