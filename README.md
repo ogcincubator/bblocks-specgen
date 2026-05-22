@@ -24,6 +24,8 @@ with requirements, conformance class table, and an abstract test suite annex.
 - [x] Subheading support — headings in `description.md` are normalized to start at h3 and appear in the section table of contents
 - [x] Clause ordering fallback — uses `clause-index` metadata when no explicit `clauses` list is given in `standards.yaml`
 - [x] Multi-register support — `--extra-register` allows importing additional compiled registers for cross-register bblock resolution
+- [x] `import-examples: N` on a requirement — pulls up to N examples from the external bblock's `json-full`, appended after any locally defined examples; each source bblock is fetched at most once per requirements class
+- [x] `bblocks://` URIs in `depends-on` — resolved to bblock name and viewer URL automatically from the imported register, no hand-typed title needed
 
 ## Pending
 
