@@ -67,10 +67,25 @@ A list of standards (or a mapping with a top-level `standards` list). Each entry
 plus the metadata fields already supported (`base-uri`, `req-uri-template`, `conf-uri-template`,
 `clauses`, `doc-number`, etc.).
 
+### How a block becomes a clause
+
+Which blocks form a standard is decided by `prefix` and the `clauses` list. How each one is
+rendered is decided from its content, not from a `standards.yaml` entry:
+
+1. `itemClass: terms` / `references` → terms / references clause.
+2. Otherwise, a block that has a `requirements.yaml` next to its `description.md` is a
+   **requirements class**, whatever its `itemClass` (e.g. a `model` block).
+3. Anything else is a prose clause (`description.md`).
+
+`requirements.yaml` may start with `class-id: <id>`, the segment used in the `/req/<id>` and
+`/conf/<id>` URIs. If omitted, it defaults to the block identifier with the standard's `prefix`
+removed (dots become `/`).
+
 ### Output
 
 Each standard is written to `<build-dir>/<id>/index.html` (even when there is only one), and
-`<build-dir>/index.html` lists the available standards. `<build-dir>` defaults to `standards`.
+`<build-dir>/index.html` lists the available standards. Each folder also gets a `report.json`
+listing every block that went into the document, the role it was given and why. `<build-dir>` defaults to `standards`.
 Any failure aborts the run without writing the top-level index. Folders of standards that no
 longer exist are removed, but only if this tool created them (they contain a `.specgen` marker).
 

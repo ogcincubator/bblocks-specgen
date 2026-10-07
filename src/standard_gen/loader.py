@@ -42,6 +42,10 @@ class Loader:
         self._standard = standard
         self._source_dir = source_dir
         self._extra_registers = list(extra_registers)
+        # One entry per block considered for the document, filled by load()
+        # and written out by generate() as report.json.
+        self.report: list[dict] = []
+        self._class_ids: dict[str, str] = {}
 
     def load(self) -> tuple[StandardMetadata, list, Resolver]:
         """
@@ -80,10 +84,19 @@ class Loader:
             bb = local_by_id.get(bblock_id)
             if not bb:
                 logger.warning("Clause bblock not found in register: %s", bblock_id)
+                self.report.append({'bblock': bblock_id, 'role': None, 'reason': 'not found in register'})
                 continue
 
-            item_class = bb.get('itemClass', 'clause')
-            content = self._load_clause(bb, item_class, resolver)
+            role, reason = self._detect_role(bb, resolver)
+            logger.info("%s: %s (%s)", bb['itemIdentifier'], role, reason)
+            content = self._load_clause(bb, role, resolver)
+            self.report.append({
+                'bblock': bb['itemIdentifier'],
+                'itemClass': bb.get('itemClass'),
+                'role': role,
+                'reason': reason,
+                'loaded': content is not None,
+            })
             if content is None:
                 continue
 
@@ -111,19 +124,54 @@ class Loader:
     # Clause loading
     # ------------------------------------------------------------------
 
-    def _load_clause(self, bb: dict, item_class: str, resolver: Resolver):
-        if item_class in ('clause',):
-            return self._load_prose_clause(bb, resolver)
-        elif item_class == 'terms':
+    def _detect_role(self, bb: dict, resolver: Resolver) -> tuple[str, str]:
+        """
+        Decide how a block takes part in the document, returning (role, reason).
+
+        'terms' and 'references' item classes are specific kinds of block and
+        win outright. Any other block that ships a requirements.yaml is a
+        requirements class, whatever its itemClass (e.g. a 'model' block);
+        otherwise it is a prose clause.
+        """
+        item_class = bb.get('itemClass')
+        if item_class in ('terms', 'references'):
+            return item_class, f"itemClass '{item_class}'"
+        if self._has_requirements(bb, resolver):
+            if item_class == 'clause':
+                logger.warning(
+                    "%s has itemClass 'clause' but also a requirements.yaml; "
+                    "treating it as a requirements class", bb['itemIdentifier'])
+            return 'requirements-class', 'requirements.yaml found'
+        if item_class == 'requirements-class':
+            logger.warning("%s has itemClass 'requirements-class' but no requirements.yaml",
+                           bb['itemIdentifier'])
+            return 'prose', "itemClass 'requirements-class' but no requirements.yaml"
+        return 'prose', 'no requirements.yaml'
+
+    def _requirements_url(self, bb: dict) -> str:
+        return bb['sourceFiles'].rstrip('/') + '/requirements.yaml'
+
+    def _has_requirements(self, bb: dict, resolver: Resolver) -> bool:
+        url = self._requirements_url(bb)
+        local = resolver.local_path(url)
+        if local is not None:
+            return local.is_file()
+        try:
+            resolver.fetch(url)
+        except requests.HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:
+                return False
+            raise
+        return True
+
+    def _load_clause(self, bb: dict, role: str, resolver: Resolver):
+        if role == 'terms':
             return self._load_terms_clause(bb, resolver)
-        elif item_class == 'references':
+        elif role == 'references':
             return self._load_references_clause(bb, resolver)
-        elif item_class == 'requirements-class':
+        elif role == 'requirements-class':
             return self._load_req_class(bb, resolver)
-        else:
-            logger.warning("Unhandled itemClass '%s' for %s — treating as prose",
-                           item_class, bb['itemIdentifier'])
-            return self._load_prose_clause(bb, resolver)
+        return self._load_prose_clause(bb, resolver)
 
     def _load_prose_clause(self, bb: dict, resolver: Resolver) -> ProseClause:
         desc_url = bb['sourceFiles'].rstrip('/') + '/description.md'
@@ -210,11 +258,7 @@ class Loader:
         )
 
     def _load_req_class(self, bb: dict, resolver: Resolver) -> Optional[ReqClass]:
-        req_url = self._resource_url(bb, 'requirements')
-        if not req_url:
-            logger.warning("No requirements resource for %s", bb['itemIdentifier'])
-            return None
-
+        req_url = self._requirements_url(bb)
         try:
             req_data = yaml.safe_load(resolver.fetch(req_url)) or {}
         except Exception as e:
@@ -228,8 +272,7 @@ class Loader:
         except Exception:
             pass
 
-        # Derive class IDs from bblock identifier suffix after "requirements."
-        class_id = _req_class_id_from_bblock(bb['itemIdentifier'])
+        class_id = self._class_id(bb, resolver, req_data)
         req_class_uri = bb.get('req-class-uri') or resolver.req_uri(class_id)
         conf_class_uri = bb.get('conformance-class-uri') or resolver.conf_uri(class_id)
 
@@ -261,7 +304,7 @@ class Loader:
             elif 'bblock' in dep:
                 dep_bb = resolver.get_bblock(dep['bblock'])
                 dep_name = dep_bb['name'] if dep_bb else dep['bblock']
-                dep_uri = resolver.conf_uri(_req_class_id_from_bblock(dep['bblock']))
+                dep_uri = resolver.conf_uri(self._class_id(dep_bb or {'itemIdentifier': dep['bblock']}, resolver))
                 depends_on.append(Dependency(uri=dep_uri, title=dep_name))
 
         # Requirements
@@ -408,6 +451,34 @@ class Loader:
     # Helpers
     # ------------------------------------------------------------------
 
+    def _class_id(self, bb: dict, resolver: Resolver, req_data: Optional[dict] = None) -> str:
+        """
+        Requirements class id (the path segment in /req/<id> and /conf/<id>).
+
+        Taken from 'class-id' in the block's requirements.yaml; if absent, the
+        block identifier with the standard's prefix stripped (dots become '/').
+        Blocks outside the standard that can't be read fall back to the last
+        identifier segment.
+        """
+        identifier = bb['itemIdentifier']
+        if identifier in self._class_ids:
+            return self._class_ids[identifier]
+
+        if req_data is None and 'sourceFiles' in bb:
+            try:
+                req_data = yaml.safe_load(resolver.fetch(self._requirements_url(bb))) or {}
+            except Exception:
+                req_data = {}
+        class_id = (req_data or {}).get('class-id')
+        if not class_id:
+            prefix = self._standard['prefix'].rstrip('.') + '.'
+            if identifier.startswith(prefix) and len(identifier) > len(prefix):
+                class_id = identifier[len(prefix):].replace('.', '/')
+            else:
+                class_id = identifier.split('.')[-1]
+        self._class_ids[identifier] = class_id
+        return class_id
+
     def _resource_url(self, bb: dict, role: str) -> Optional[str]:
         for res in bb.get('resources', []):
             if res.get('role') == role:
@@ -471,18 +542,3 @@ def _parse_metadata(std: dict) -> StandardMetadata:
         abstract=std.get('abstract', ''),
         boilerplate=std.get('boilerplate', {}),
     )
-
-
-def _req_class_id_from_bblock(bblock_id: str) -> str:
-    """
-    Extract the requirements class path segment from a bblock identifier.
-    e.g. "ogc.api.processes.part1.requirements.core" → "core"
-         "ogc.api.processes.part1.requirements.json" → "json"
-    Uses everything after "requirements." as the class path.
-    """
-    marker = '.requirements.'
-    idx = bblock_id.find(marker)
-    if idx >= 0:
-        return bblock_id[idx + len(marker):].replace('.', '/')
-    # fallback: last segment
-    return bblock_id.split('.')[-1]

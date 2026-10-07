@@ -1,3 +1,4 @@
+import json
 import tempfile
 import textwrap
 import unittest
@@ -171,3 +172,55 @@ class PluginTest(_TmpDirCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class RequirementsDetectionTest(_TmpDirCase):
+    BASE = 'http://example.com/src/'
+
+    def _generate(self, blocks, files):
+        for rel, text in files.items():
+            path = self.root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding='utf-8')
+        register = {
+            'baseURL': self.BASE,
+            'bblocks': [
+                {'itemIdentifier': ident, 'name': ident, 'sourceFiles': f'{self.BASE}{ident}/',
+                 **extra}
+                for ident, extra in blocks.items()
+            ],
+        }
+        std = _std('s', prefix='test.s.')
+        std['req-uri-template'] = 'http://example.com/req/{id}'
+        std['conf-uri-template'] = 'http://example.com/conf/{id}'
+        std['clauses'] = [{'bblock': i} for i in blocks]
+        out = generate(register, [std], source_dir=self.root, build_dir=self.root / 'out')
+        report = json.loads((out.parent / 's' / 'report.json').read_text())
+        html = (out.parent / 's' / 'index.html').read_text()
+        return {b['bblock']: b for b in report['blocks']}, html
+
+    def test_model_block_with_requirements_is_a_class(self):
+        report, html = self._generate(
+            {'test.s.co': {'itemClass': 'model'}, 'test.s.intro': {'itemClass': 'clause'}},
+            {
+                'test.s.co/requirements.yaml': (
+                    'requirements:\n  - {id: r1, statement: do it}\n'),
+                'test.s.co/description.md': 'Co.',
+                'test.s.intro/description.md': 'Intro.',
+            },
+        )
+        self.assertEqual(report['test.s.co']['role'], 'requirements-class')
+        self.assertEqual(report['test.s.intro']['role'], 'prose')
+        self.assertIn('http://example.com/conf/co', html)
+
+    def test_class_id_explicit_and_default(self):
+        report, html = self._generate(
+            {'test.s.a.b': {'itemClass': 'model'}, 'test.s.c': {'itemClass': 'model'}},
+            {
+                'test.s.a.b/requirements.yaml': 'requirements:\n  - {id: r1, statement: x}\n',
+                'test.s.c/requirements.yaml': (
+                    'class-id: custom\nrequirements:\n  - {id: r2, statement: y}\n'),
+            },
+        )
+        self.assertIn('/conf/a/b', html)
+        self.assertIn('/conf/custom', html)

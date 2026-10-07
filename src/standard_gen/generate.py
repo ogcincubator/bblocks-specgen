@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import re
 import shutil
@@ -160,6 +161,9 @@ def generate(
         out_dir = build_dir / std_id
         Renderer(resolver, templates_dir).render(doc, out_dir)
         (out_dir / _MARKER).write_text('', encoding='utf-8')
+        (out_dir / 'report.json').write_text(
+            json.dumps({'standard': std_id, 'blocks': loader.report}, indent=2) + '\n',
+            encoding='utf-8')
 
         entries.append({
             'id': std_id,
