@@ -39,7 +39,7 @@ with requirements, conformance class table, and an abstract test suite annex.
 ## Installation
 
 ```bash
-git clone https://github.com/opengeospatial/bblocks-specgen.git
+git clone https://github.com/ogcincubator/bblocks-specgen.git
 cd bblocks-specgen
 python -m venv venv
 venv/bin/pip install -e .
@@ -118,7 +118,7 @@ Declare it in the register repo's `bblocks-config.yaml`. All `config` keys are o
 plugins:
   build:
     - classes: [standard_gen.plugin.SpecgenBuildPlugin]
-      pip: [bblocks-specgen @ git+https://github.com/opengeospatial/bblocks-specgen]
+      pip: [bblocks-specgen @ git+https://github.com/ogcincubator/bblocks-specgen]
       config:
         standards-file: standards.yaml   # relative to the repo root
         build-dir: standards             # relative to the repo root, or absolute

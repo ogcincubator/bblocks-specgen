@@ -22,7 +22,7 @@ class SpecgenBuildPlugin:
         plugins:
           build:
             - classes: [standard_gen.plugin.SpecgenBuildPlugin]
-              pip: [bblocks-specgen @ git+https://github.com/opengeospatial/bblocks-specgen]
+              pip: [bblocks-specgen @ git+https://github.com/ogcincubator/bblocks-specgen]
               config:
                 standards-file: standards.yaml   # relative to the repo root
                 build-dir: standards             # relative to the repo root, or absolute
