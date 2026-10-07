@@ -79,7 +79,10 @@ rendered is decided from its content, not from a `standards.yaml` entry:
 
 `requirements.yaml` may start with `class-id: <id>`, the segment used in the `/req/<id>` and
 `/conf/<id>` URIs. If omitted, it defaults to the block identifier with the standard's `prefix`
-removed (dots become `/`).
+removed (dots become `/`). To keep requirements grouped under a namespace in the register
+(e.g. `<prefix>.requirements.core`) without that group leaking into the class URIs, set
+`class-id-root: requirements` on the standard in `standards.yaml`: `<prefix>.requirements.core`
+then gets the class id `core`. An explicit `class-id` always wins.
 
 ### Figures
 
@@ -97,6 +100,14 @@ the figure, whose text is "Figure N" if the link text is empty (link text, if gi
 ```markdown
 The classes are shown in [](assets/core.png).
 ```
+
+An image is shown only once, where it is first included: if the same image is embedded again
+(in the same block or another), the repeat is omitted and references point to the first. This
+also holds for remote images, which are numbered and referenced the same way but not copied.
+Images in examples (including those pulled in with `import-examples`) are resolved against the
+block the example comes from, and absolute URLs under the register's `baseURL` are mapped back to
+the local file. The `assets/` folder is rebuilt on every run, so images that are no longer used
+disappear.
 
 Because this is an ordinary link, it also works when the Markdown is viewed outside specgen.
 To give a figure a stable anchor, or to disambiguate when the same image is used twice, add an

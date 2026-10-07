@@ -274,3 +274,95 @@ class FiguresTest(_TmpDirCase):
         html = (out / 'index.html').read_text()
         self.assertIn('Figure 1 — Body', html)
         self.assertIn('Figure B.1 — Extra', html)
+
+    def test_repeated_image_is_shown_once_where_first_included(self):
+        out = self._generate({
+            'test.s.one': '![Shared](assets/a.png)\n\n![Shared again](assets/a.png)\n\n'
+                          'See [](assets/a.png).\n',
+        })
+        html = (out / 'index.html').read_text()
+        self.assertEqual(html.count('<figure '), 1)
+        self.assertIn('Figure 1 — Shared<', html)
+        self.assertNotIn('Shared again', html)
+        self.assertIn('<a href="#fig-a" class="figure-ref">Figure 1</a>', html)
+
+    def test_remote_images_are_figures_but_not_copied(self):
+        out = self._generate({
+            'test.s.one': '![Remote](https://example.org/img/r.png)\n\nSee [](https://example.org/img/r.png).\n',
+        })
+        html = (out / 'index.html').read_text()
+        self.assertIn('<img src="https://example.org/img/r.png"', html)
+        self.assertIn('Figure 1 — Remote', html)
+        self.assertIn('<a href="#fig-r" class="figure-ref">Figure 1</a>', html)
+        self.assertFalse((out / 'assets' / 'test-s-one' / 'r.png').exists())
+
+    def test_absolute_url_under_base_url_maps_to_local_file(self):
+        out = self._generate({
+            'test.s.one': f'![Abs]({self.BASE}test.s.one/assets/a.png)\n\n[](assets/a.png)\n',
+        })
+        html = (out / 'index.html').read_text()
+        self.assertIn('src="assets/test-s-one/a.png"', html)
+        self.assertIn('Figure 1</a>', html)
+        self.assertTrue((out / 'assets/test-s-one/a.png').is_file())
+
+    def test_stale_assets_are_removed_on_rerun(self):
+        out = self._generate({'test.s.one': '![One](assets/a.png)\n'})
+        self.assertTrue((out / 'assets/test-s-one/a.png').is_file())
+        (out / 'assets' / 'test-s-one' / 'stale.png').write_bytes(b'x')
+        out = self._generate({'test.s.one': 'No images now.\n'})
+        self.assertFalse((out / 'assets').exists())
+
+    def test_imported_example_images_resolve_against_source_block(self):
+        (self.root / 'test.s.model/assets').mkdir(parents=True)
+        (self.root / 'test.s.model/assets/m.png').write_bytes(b'MODEL')
+        (self.root / 'test.s.model/json-full.json').write_text(json.dumps({
+            'examples': [{'title': 'Ex', 'content': '![From model](assets/m.png)'}],
+        }), encoding='utf-8')
+        (self.root / 'test.s.cls').mkdir()
+        (self.root / 'test.s.cls/requirements.yaml').write_text(
+            'requirements:\n  - id: r1\n    statement: x\n'
+            '    applies-to: {bblock: test.s.model}\n    import-examples: 1\n',
+            encoding='utf-8')
+        register = {'baseURL': self.BASE, 'bblocks': [
+            {'itemIdentifier': 'test.s.model', 'name': 'Model',
+             'sourceFiles': f'{self.BASE}test.s.model/',
+             'documentation': {'json-full': {'url': f'{self.BASE}test.s.model/json-full.json'}}},
+            {'itemIdentifier': 'test.s.cls', 'name': 'Cls',
+             'sourceFiles': f'{self.BASE}test.s.cls/'},
+        ]}
+        std = _std('s', prefix='test.s.')
+        std['req-uri-template'] = 'http://example.com/req/{id}'
+        std['conf-uri-template'] = 'http://example.com/conf/{id}'
+        std['clauses'] = [{'bblock': 'test.s.cls'}]
+        out = generate(register, [std], source_dir=self.root,
+                       build_dir=self.root / 'out').parent / 's'
+        html = (out / 'index.html').read_text()
+        self.assertIn('Figure 1 — From model', html)
+        self.assertEqual((out / 'assets/test-s-model/m.png').read_bytes(), b'MODEL')
+
+
+class ClassIdRootTest(_TmpDirCase):
+    BASE = 'http://example.com/src/'
+
+    def test_class_id_root_is_stripped(self):
+        for rel, text in {
+            'test.s.requirements.core/requirements.yaml':
+                'requirements:\n  - {id: r1, statement: x}\n',
+            'test.s.other/requirements.yaml':
+                'requirements:\n  - {id: r2, statement: y}\n',
+        }.items():
+            path = self.root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding='utf-8')
+        register = {'baseURL': self.BASE, 'bblocks': [
+            {'itemIdentifier': i, 'name': i, 'sourceFiles': f'{self.BASE}{i}/'}
+            for i in ('test.s.requirements.core', 'test.s.other')]}
+        std = _std('s', prefix='test.s.')
+        std['req-uri-template'] = 'http://example.com/req/{id}'
+        std['conf-uri-template'] = 'http://example.com/conf/{id}'
+        std['class-id-root'] = 'requirements'
+        std['clauses'] = [{'bblock': 'test.s.requirements.core'}, {'bblock': 'test.s.other'}]
+        out = generate(register, [std], source_dir=self.root, build_dir=self.root / 'out')
+        html = (out.parent / 's' / 'index.html').read_text()
+        self.assertIn('/conf/core"', html)
+        self.assertIn('/conf/other"', html)

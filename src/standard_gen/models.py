@@ -62,6 +62,10 @@ class Example:
     title: Optional[str]
     content: str
     snippets: list[Snippet] = field(default_factory=list)
+    # Block the example comes from: relative links and images in 'content'
+    # are relative to its source directory (may differ from the block
+    # that displays it, for imported examples).
+    source_bblock_id: Optional[str] = None
 
 
 @dataclass

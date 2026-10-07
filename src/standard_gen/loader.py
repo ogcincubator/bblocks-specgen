@@ -378,6 +378,7 @@ class Loader:
                 title=ex.get('title'),
                 content=ex.get('content', ''),
                 snippets=snippets,
+                source_bblock_id=bb['itemIdentifier'],
             ))
         return examples
 
@@ -427,6 +428,7 @@ class Loader:
                     title=ex.get('title'),
                     content=ex.get('content', ''),
                     snippets=snippets,
+                    source_bblock_id=identifier,
                 ))
 
     # ------------------------------------------------------------------
@@ -457,6 +459,8 @@ class Loader:
 
         Taken from 'class-id' in the block's requirements.yaml; if absent, the
         block identifier with the standard's prefix stripped (dots become '/').
+        If the standard sets 'class-id-root', that group is stripped as well
+        (<prefix>.<class-id-root>.core -> 'core').
         Blocks outside the standard that can't be read fall back to the last
         identifier segment.
         """
@@ -472,10 +476,13 @@ class Loader:
         class_id = (req_data or {}).get('class-id')
         if not class_id:
             prefix = self._standard['prefix'].rstrip('.') + '.'
-            if identifier.startswith(prefix) and len(identifier) > len(prefix):
-                class_id = identifier[len(prefix):].replace('.', '/')
-            else:
-                class_id = identifier.split('.')[-1]
+            roots = [prefix]
+            if root := self._standard.get('class-id-root'):
+                roots.insert(0, prefix + root.strip('.') + '.')
+            class_id = next(
+                (identifier[len(r):].replace('.', '/') for r in roots
+                 if identifier.startswith(r) and len(identifier) > len(r)),
+                identifier.split('.')[-1])
         self._class_ids[identifier] = class_id
         return class_id
 

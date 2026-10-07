@@ -50,7 +50,7 @@ class FigureRegistry:
         self._resolver = resolver
         self._section_numbers = section_numbers
         self._frozen = False
-        self._figures: dict[tuple, Figure] = {}
+        self._seen: dict[str, int] = {}
         self._by_ref: dict[str, Figure] = {}
         self._counters: dict[str, int] = {}
         self._used_ids: set[str] = set()
@@ -60,17 +60,30 @@ class FigureRegistry:
 
     def freeze(self) -> None:
         self._frozen = True
+        self._seen.clear()
 
     # -- image sources ---------------------------------------------------
 
-    def resolve(self, src: str, bblock_id: Optional[str]) -> tuple[str, str]:
-        """Return (key, href): a canonical key for the image and the URL to emit."""
+    def _to_url(self, src: str, bblock_id: Optional[str]) -> Optional[str]:
+        """Absolute URL of an image reference, or None if it cannot be resolved."""
         if _SCHEME_RE.match(src):
-            return src, src
+            return src
         bb = self._resolver.get_bblock(bblock_id) if bblock_id else None
         if not bb or not bb.get('sourceFiles'):
+            return None
+        return urljoin(bb['sourceFiles'].rstrip('/') + '/', src)
+
+    def resolve(self, src: str, bblock_id: Optional[str]) -> tuple[str, str]:
+        """
+        Return (key, href): a canonical key for the image and the URL to emit.
+
+        Images inside the local register (relative paths, or absolute URLs
+        under its baseURL) are copied next to the document; the same file
+        always gets the same key. Anything else is left pointing at its URL.
+        """
+        url = self._to_url(src, bblock_id)
+        if url is None:
             return src, src
-        url = urljoin(bb['sourceFiles'].rstrip('/') + '/', src)
         local = self._resolver.local_path(url)
         if local is None:
             return url, url
@@ -80,7 +93,7 @@ class FigureRegistry:
             if not path.is_file():
                 raise FileNotFoundError(
                     f"Image '{src}' referenced from {bblock_id} not found: {path}")
-            self.assets[key] = (path, self._destination(bblock_id, path.name, key))
+            self.assets[key] = (path, self._destination(bblock_id or 'misc', path.name, key))
         return key, self.assets[key][1]
 
     def _destination(self, bblock_id: str, name: str, key: str) -> str:
@@ -101,46 +114,51 @@ class FigureRegistry:
     # -- figures ---------------------------------------------------------
 
     def figure(self, bblock_id: Optional[str], key: str, caption: str,
-               explicit_id: Optional[str]) -> Figure:
-        identity = (bblock_id, key, caption, explicit_id)
-        fig = self._figures.get(identity)
-        if fig or self._frozen:
-            if fig is None:
-                raise RuntimeError(f"Figure {identity} was not found in the first pass")
-            return fig
+               explicit_id: Optional[str]) -> tuple[Figure, bool]:
+        """
+        Register a figure and return (figure, first). An image is shown only
+        once, where it is first included: later embeds of the same image
+        (in this or any other block) get first=False and are not rendered.
+        """
+        seen = self._seen[key] = self._seen.get(key, 0) + 1
+        first = seen == 1
+        fig = self._by_ref.get(key)
 
-        number = self._section_numbers.get(bblock_id, '')
-        scope = number if re.fullmatch(r'[A-Z]', number) else ''
-        n = self._counters[scope] = self._counters.get(scope, 0) + 1
-        label = f'{scope}.{n}' if scope else str(n)
+        if fig is None:
+            if self._frozen:
+                raise RuntimeError(f"Figure {key} was not found in the first pass")
+            number = self._section_numbers.get(bblock_id, '')
+            scope = number if re.fullmatch(r'[A-Z]', number) else ''
+            n = self._counters[scope] = self._counters.get(scope, 0) + 1
+            label = f'{scope}.{n}' if scope else str(n)
+            fig_id = self._unique_id(explicit_id or 'fig-' + _slugify(
+                Path(key.split('?')[0]).stem or label))
+            fig = Figure(id=fig_id, label=label, caption=caption)
+            self._by_ref[key] = self._by_ref[f'#{fig_id}'] = fig
+        elif explicit_id and not self._frozen:
+            self._by_ref.setdefault(f'#{explicit_id}', fig)
 
-        fig_id = explicit_id or 'fig-' + _slugify(Path(key.split('?')[0]).stem or label)
-        base, i = fig_id, 1
+        if not first and self._frozen:
+            logger.info("%s: image '%s' is already shown as Figure %s; omitting repeat",
+                        bblock_id, key, fig.label)
+        return fig, first
+
+    def _unique_id(self, base: str) -> str:
+        fig_id, i = base, 1
         while fig_id in self._used_ids:
             i += 1
             fig_id = f'{base}-{i}'
         self._used_ids.add(fig_id)
-
-        fig = Figure(id=fig_id, label=label, caption=caption)
-        self._figures[identity] = fig
-        self._by_ref.setdefault(key, fig)
-        self._by_ref[f'#{fig_id}'] = fig
-        return fig
+        return fig_id
 
     def lookup(self, href: str, bblock_id: Optional[str]) -> Optional[Figure]:
         if href.startswith('#'):
             return self._by_ref.get(href)
-        return self._by_ref.get(self._key_only(href, bblock_id))
-
-    def _key_only(self, href: str, bblock_id: Optional[str]) -> str:
-        if _SCHEME_RE.match(href):
-            return href
-        bb = self._resolver.get_bblock(bblock_id) if bblock_id else None
-        if not bb or not bb.get('sourceFiles'):
-            return href
-        url = urljoin(bb['sourceFiles'].rstrip('/') + '/', href)
+        url = self._to_url(href, bblock_id)
+        if url is None:
+            return self._by_ref.get(href)
         local = self._resolver.local_path(url)
-        return str(local.resolve()) if local is not None else url
+        return self._by_ref.get(str(local.resolve()) if local is not None else url)
 
     @property
     def frozen(self) -> bool:
@@ -173,8 +191,8 @@ def _figures_rule(state) -> None:
                      and tokens[i + 1].type == 'paragraph_close')
             caption = _inline_text(child.children or []).strip()
             if alone and caption:
-                child.meta = {'figure': reg.figure(
-                    bblock_id, key, caption, child.attrGet('id'))}
+                fig, first = reg.figure(bblock_id, key, caption, child.attrGet('id'))
+                child.meta = {'figure': fig, 'first': first}
                 tokens[i - 1].hidden = tokens[i + 1].hidden = True
 
         for j, child in enumerate(children):
@@ -203,6 +221,8 @@ def _render_image(self, tokens, idx, options, env) -> str:
     fig = (tok.meta or {}).get('figure')
     if not fig:
         return img
+    if not tok.meta['first']:
+        return ''
     caption = self.renderInline(tok.children, options, env)
     return (f'<figure id="{html.escape(fig.id, quote=True)}">{img}'
             f'<figcaption>Figure {fig.label} — {caption}</figcaption></figure>')
