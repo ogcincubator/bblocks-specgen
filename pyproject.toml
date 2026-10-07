@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bblocks-specgen"
-version = "0.1.0"
+version = "0.2.0"
 description = "OGC standards document generator from Building Blocks"
 requires-python = ">=3.10"
 dependencies = [
