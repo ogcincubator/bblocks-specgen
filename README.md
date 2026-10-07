@@ -81,7 +81,7 @@ rendered is decided from its content, not from a `standards.yaml` entry:
 `/conf/<id>` URIs. If omitted, it defaults to the block identifier with the standard's `prefix`
 removed (dots become `/`). To keep requirements grouped under a namespace in the register
 (e.g. `<prefix>.requirements.core`) without that group leaking into the class URIs, set
-`class-id-root: requirements` on the standard in `standards.yaml`: `<prefix>.requirements.core`
+`class-id-prefix: <prefix>.requirements.` on the standard in `standards.yaml` (a full identifier prefix, which must start with `prefix`): `<prefix>.requirements.core`
 then gets the class id `core`. An explicit `class-id` always wins.
 
 ### Figures

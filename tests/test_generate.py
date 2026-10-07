@@ -36,13 +36,13 @@ class _TmpDirCase(unittest.TestCase):
 class LoadStandardsTest(_TmpDirCase):
     def test_valid_list_and_mapping(self):
         path = self.write_standards('''
-            - {id: a, prefix: x.a., title: A}
-            - {id: b_2-c, prefix: x.b., title: B}
+            - {id: a, prefix: x.a., title: A, base-uri: 'http://e.org/a'}
+            - {id: b_2-c, prefix: x.b., title: B, base-uri: 'http://e.org/b'}
         ''')
         self.assertEqual([s['id'] for s in load_standards(path)], ['a', 'b_2-c'])
         path = self.write_standards('''
             standards:
-              - {id: a, prefix: x.a., title: A}
+              - {id: a, prefix: x.a., title: A, base-uri: 'http://e.org/a'}
         ''')
         self.assertEqual(len(load_standards(path)), 1)
 
@@ -53,19 +53,20 @@ class LoadStandardsTest(_TmpDirCase):
 
     def test_duplicate_id(self):
         path = self.write_standards('''
-            - {id: a, prefix: x.a., title: A}
-            - {id: a, prefix: x.b., title: B}
+            - {id: a, prefix: x.a., title: A, base-uri: u}
+            - {id: a, prefix: x.b., title: B, base-uri: u}
         ''')
         with self.assertRaisesRegex(ValueError, 'duplicate'):
             load_standards(path)
 
     def test_unsafe_id(self):
-        path = self.write_standards('- {id: ../evil, prefix: x., title: A}')
+        path = self.write_standards('- {id: ../evil, prefix: x., title: A, base-uri: u}')
         with self.assertRaisesRegex(ValueError, 'invalid id'):
             load_standards(path)
 
-    def test_missing_title_and_prefix(self):
-        for entry, key in (('{id: a, prefix: x.}', 'title'), ('{id: a, title: A}', 'prefix')):
+    def test_missing_title_prefix_and_base_uri(self):
+        for entry, key in (('{id: a, prefix: x., base-uri: u}', 'title'), ('{id: a, title: A, base-uri: u}', 'prefix'),
+                           ('{id: a, prefix: x., title: A}', 'base-uri')):
             path = self.write_standards(f'- {entry}')
             with self.assertRaisesRegex(ValueError, key):
                 load_standards(path)
@@ -341,10 +342,10 @@ class FiguresTest(_TmpDirCase):
         self.assertEqual((out / 'assets/test-s-model/m.png').read_bytes(), b'MODEL')
 
 
-class ClassIdRootTest(_TmpDirCase):
+class ClassIdPrefixTest(_TmpDirCase):
     BASE = 'http://example.com/src/'
 
-    def test_class_id_root_is_stripped(self):
+    def test_class_id_prefix_is_stripped(self):
         for rel, text in {
             'test.s.requirements.core/requirements.yaml':
                 'requirements:\n  - {id: r1, statement: x}\n',
@@ -360,9 +361,16 @@ class ClassIdRootTest(_TmpDirCase):
         std = _std('s', prefix='test.s.')
         std['req-uri-template'] = 'http://example.com/req/{id}'
         std['conf-uri-template'] = 'http://example.com/conf/{id}'
-        std['class-id-root'] = 'requirements'
+        std['class-id-prefix'] = 'test.s.requirements.'
         std['clauses'] = [{'bblock': 'test.s.requirements.core'}, {'bblock': 'test.s.other'}]
         out = generate(register, [std], source_dir=self.root, build_dir=self.root / 'out')
         html = (out.parent / 's' / 'index.html').read_text()
         self.assertIn('/conf/core"', html)
         self.assertIn('/conf/other"', html)
+
+    def test_class_id_prefix_must_start_with_prefix(self):
+        path = self.write_standards("""
+            - {id: a, prefix: x.a., title: A, base-uri: u, class-id-prefix: y.b.requirements.}
+        """)
+        with self.assertRaises(ValueError):
+            load_standards(path)

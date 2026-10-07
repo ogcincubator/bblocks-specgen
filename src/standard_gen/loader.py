@@ -148,8 +148,12 @@ class Loader:
             return 'prose', "itemClass 'requirements-class' but no requirements.yaml"
         return 'prose', 'no requirements.yaml'
 
+    @staticmethod
+    def _source_file_url(bb: dict, name: str) -> str:
+        return bb['sourceFiles'].rstrip('/') + '/' + name
+
     def _requirements_url(self, bb: dict) -> str:
-        return bb['sourceFiles'].rstrip('/') + '/requirements.yaml'
+        return self._source_file_url(bb, 'requirements.yaml')
 
     def _has_requirements(self, bb: dict, resolver: Resolver) -> bool:
         url = self._requirements_url(bb)
@@ -188,13 +192,11 @@ class Loader:
         )
 
     def _load_terms_clause(self, bb: dict, resolver: Resolver) -> TermsClause:
-        terms_url = self._resource_url(bb, 'terms')
         terms_data = {}
-        if terms_url:
-            try:
-                terms_data = yaml.safe_load(resolver.fetch(terms_url)) or {}
-            except Exception as e:
-                logger.warning("Could not fetch terms.yaml for %s: %s", bb['itemIdentifier'], e)
+        try:
+            terms_data = yaml.safe_load(resolver.fetch(self._source_file_url(bb, 'terms.yaml'))) or {}
+        except Exception as e:
+            logger.warning("Could not fetch terms.yaml for %s: %s", bb['itemIdentifier'], e)
 
         desc_url = bb['sourceFiles'].rstrip('/') + '/description.md'
         preamble = ''
@@ -223,13 +225,11 @@ class Loader:
         )
 
     def _load_references_clause(self, bb: dict, resolver: Resolver) -> ReferencesClause:
-        refs_url = self._resource_url(bb, 'references')
         refs_data = {}
-        if refs_url:
-            try:
-                refs_data = yaml.safe_load(resolver.fetch(refs_url)) or {}
-            except Exception as e:
-                logger.warning("Could not fetch references.yaml for %s: %s", bb['itemIdentifier'], e)
+        try:
+            refs_data = yaml.safe_load(resolver.fetch(self._source_file_url(bb, 'references.yaml'))) or {}
+        except Exception as e:
+            logger.warning("Could not fetch references.yaml for %s: %s", bb['itemIdentifier'], e)
 
         desc_url = bb['sourceFiles'].rstrip('/') + '/description.md'
         preamble = ''
@@ -459,8 +459,9 @@ class Loader:
 
         Taken from 'class-id' in the block's requirements.yaml; if absent, the
         block identifier with the standard's prefix stripped (dots become '/').
-        If the standard sets 'class-id-root', that group is stripped as well
-        (<prefix>.<class-id-root>.core -> 'core').
+        If the standard sets 'class-id-prefix' (a full identifier prefix that
+        starts with 'prefix'), that is stripped instead, so blocks can be
+        grouped as <prefix>.requirements.core while the class id is 'core'.
         Blocks outside the standard that can't be read fall back to the last
         identifier segment.
         """
@@ -477,20 +478,14 @@ class Loader:
         if not class_id:
             prefix = self._standard['prefix'].rstrip('.') + '.'
             roots = [prefix]
-            if root := self._standard.get('class-id-root'):
-                roots.insert(0, prefix + root.strip('.') + '.')
+            if class_prefix := self._standard.get('class-id-prefix'):
+                roots.insert(0, class_prefix.rstrip('.') + '.')
             class_id = next(
                 (identifier[len(r):].replace('.', '/') for r in roots
                  if identifier.startswith(r) and len(identifier) > len(r)),
                 identifier.split('.')[-1])
         self._class_ids[identifier] = class_id
         return class_id
-
-    def _resource_url(self, bb: dict, role: str) -> Optional[str]:
-        for res in bb.get('resources', []):
-            if res.get('role') == role:
-                return res.get('ref')
-        return None
 
     def _load_imported_registers(self, local_register: dict) -> list[dict]:
         bblocks = []
@@ -541,8 +536,8 @@ def _parse_metadata(std: dict) -> StandardMetadata:
         version=std.get('version', ''),
         pub_date=std.get('pub-date'),
         base_uri=std['base-uri'],
-        req_uri_template=std['req-uri-template'],
-        conf_uri_template=std['conf-uri-template'],
+        req_uri_template=std.get('req-uri-template', '{base-uri}/{status}req/{id}'),
+        conf_uri_template=std.get('conf-uri-template', '{base-uri}/{status}conf/{id}'),
         editors=std.get('editors', []),
         wg=std.get('wg', ''),
         keywords=std.get('keywords', []),

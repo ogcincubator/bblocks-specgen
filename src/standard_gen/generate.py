@@ -34,7 +34,7 @@ def load_standards(path: Path) -> list[dict]:
     """
     Read and validate standards.yaml: a list of standards, or a mapping with
     a top-level 'standards' list. Each entry needs a unique, directory-safe
-    'id', plus 'prefix' and 'title'.
+    'id', plus 'prefix', 'title' and 'base-uri'.
     """
     if not path.is_file():
         raise FileNotFoundError(f"Standards file not found: {path}")
@@ -63,9 +63,17 @@ def load_standards(path: Path) -> list[dict]:
         if std_id in seen:
             raise ValueError(f"{path}: duplicate standard id {std_id!r}")
         seen.add(std_id)
-        for key in ('prefix', 'title'):
+        for key in ('prefix', 'title', 'base-uri'):
             if not std.get(key):
                 raise ValueError(f"{where} (id {std_id!r}): missing required '{key}'")
+
+        if (class_prefix := std.get('class-id-prefix')) is not None:
+            prefix = std['prefix'].rstrip('.') + '.'
+            if not isinstance(class_prefix, str) or not (class_prefix.rstrip('.') + '.').startswith(prefix):
+                raise ValueError(
+                    f"{where} (id {std_id!r}): 'class-id-prefix' must be a string starting "
+                    f"with the standard's prefix {std['prefix']!r}, got {class_prefix!r}"
+                )
 
     prefixes = [(s['id'], s['prefix']) for s in data]
     for id_a, prefix_a in prefixes:
