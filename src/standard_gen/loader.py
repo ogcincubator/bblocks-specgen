@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Optional
@@ -20,41 +19,42 @@ logger = logging.getLogger(__name__)
 
 class Loader:
     """
-    Reads a compiled register.json (which includes standards metadata from
-    standards.yaml) and produces the raw data objects that Assembler will
-    turn into a StandardDocument.
+    Takes an already-parsed compiled register plus one standard's definition
+    (an entry from standards.yaml, see generate.load_standards()) and produces
+    the raw data objects that Assembler will turn into a StandardDocument.
+
+    Pure in-memory transform - no file/network I/O of its own beyond what
+    Resolver.fetch() does while walking clauses (local source files or
+    remote bblock resources). Register/extra-register loading (from disk,
+    or from a build-plugin hook payload) is the caller's job - see
+    generate.generate() for the shared entry point CLI and the build plugin
+    both use.
     """
 
     def __init__(
         self,
-        register_path: Path,
-        prefix: Optional[str] = None,
-        extra_registers: list[Path] = (),
+        register: dict,
+        standard: dict,
+        source_dir: Path,
+        extra_registers: list[dict] = (),
     ):
-        self._register_path = register_path
-        self._prefix = prefix
+        self._register = register
+        self._standard = standard
+        self._source_dir = source_dir
         self._extra_registers = list(extra_registers)
 
     def load(self) -> tuple[StandardMetadata, list, Resolver]:
         """
         Returns (metadata, clause_data_list, resolver).
-        If multiple standards are in the register, prefix selects which one.
         """
-        local_register = json.loads(self._register_path.read_text())
-        source_dir = self._register_path.parent.parent  # build-local/ → repo root
+        local_register = self._register
+        source_dir = self._source_dir
 
-        standards = local_register.get('standards', [])
-        if not standards:
-            raise ValueError("No 'standards' field found in register.json. "
-                             "Ensure standards.yaml exists at the repo root and "
-                             "bblocks-postprocess has been run.")
-
-        std = _select_standard(standards, self._prefix)
+        std = self._standard
         metadata = _parse_metadata(std)
 
         imported_bblocks = self._load_imported_registers(local_register)
-        for extra in self._extra_registers:
-            reg = json.loads(extra.read_text())
+        for reg in self._extra_registers:
             imported_bblocks.extend(reg.get('bblocks', []))
 
         resolver = Resolver(metadata, local_register, imported_bblocks, source_dir)
@@ -447,21 +447,6 @@ def _clauses_from_index(local_by_id: dict) -> list:
         entries.insert(1, {'auto': 'conformance'})
     entries.append({'auto': 'annex-a'})
     return entries
-
-
-def _select_standard(standards: list[dict], prefix: Optional[str]) -> dict:
-    if not prefix:
-        if len(standards) == 1:
-            return standards[0]
-        prefixes = [s.get('prefix', '?') for s in standards]
-        raise ValueError(
-            f"Register contains multiple standards ({prefixes}). "
-            "Specify --prefix to select one."
-        )
-    matches = [s for s in standards if s.get('prefix') == prefix]
-    if not matches:
-        raise ValueError(f"No standard with prefix '{prefix}' found in register.")
-    return matches[0]
 
 
 def _load_yaml(path: Path) -> dict:

@@ -116,6 +116,7 @@ def navigate_schema(schema: dict, json_path: str) -> Optional[dict]:
 class Renderer:
     def __init__(self, resolver: Resolver, templates_dir: Path):
         self._resolver = resolver
+        self._templates_dir = templates_dir
         self._env = Environment(
             loader=FileSystemLoader(str(templates_dir)),
             autoescape=False,
@@ -192,7 +193,7 @@ class Renderer:
 
         build_dir.mkdir(parents=True, exist_ok=True)
 
-        css_src = Path(__file__).parent.parent.parent / 'templates' / 'ogc-standard.css'
+        css_src = self._templates_dir / 'ogc-standard.css'
         shutil.copy(css_src, build_dir / 'ogc-standard.css')
 
         template = self._env.get_template('base.html.j2')

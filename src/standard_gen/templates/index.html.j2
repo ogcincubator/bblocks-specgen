@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Standards</title>
+  <link rel="stylesheet" href="ogc-standard.css">
+  <style>
+    .standards-index { max-width: 48rem; margin: 3rem auto; padding: 0 1rem; }
+    .standards-index ul { list-style: none; padding: 0; }
+    .standards-index li { margin: 1.25rem 0; }
+    .standards-index .std-title { font-size: 1.15rem; }
+    .standards-index .std-subtitle { display: block; font-size: 0.85rem; color: #555; }
+  </style>
+</head>
+<body>
+<main class="standards-index">
+  <p>The following standards are available:</p>
+  <ul>
+    {% for std in standards %}
+    <li>
+      <a class="std-title" href="{{ std.id }}/index.html">{{ std.title }}</a>
+      {% if std.subtitle %}<span class="std-subtitle">{{ std.subtitle }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</main>
+</body>
+</html>

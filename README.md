@@ -24,6 +24,7 @@ with requirements, conformance class table, and an abstract test suite annex.
 - [x] Subheading support — headings in `description.md` are normalized to start at h3 and appear in the section table of contents
 - [x] Clause ordering fallback — uses `clause-index` metadata when no explicit `clauses` list is given in `standards.yaml`
 - [x] Multi-register support — `--extra-register` allows importing additional compiled registers for cross-register bblock resolution
+- [x] Multiple standards per repo — each `standards.yaml` entry (required `id`) is generated to `<build-dir>/<id>/`, with an index page listing them
 - [x] `import-examples: N` on a requirement — pulls up to N examples from the external bblock's `json-full`, appended after any locally defined examples; each source bblock is fetched at most once per requirements class
 - [x] `bblocks://` URIs in `depends-on` — resolved to bblock name and viewer URL automatically from the imported register, no hand-typed title needed
 
@@ -48,21 +49,40 @@ venv/bin/pip install -e .
 
 First, run `bblocks-postprocess` in your Building Blocks repository to produce a compiled
 `register.json` (typically at `build-local/register.json`). The repository must also have a
-`standards.yaml` at the root so that standards metadata is embedded into `register.json`.
+`standards.yaml` at the root defining the standards to generate (read directly by this tool,
+not by `bblocks-postprocess`).
 
 ```bash
 venv/bin/bblocks-specgen --register path/to/build-local/register.json
 ```
 
-The generated document is written to `build/standard/index.html` by default.
+### `standards.yaml`
+
+A list of standards (or a mapping with a top-level `standards` list). Each entry requires:
+
+- `id` — unique; letters, digits, `_` and `-` only. Used as the output folder name.
+- `prefix` — the BB identifier prefix whose blocks make up this standard.
+- `title`
+
+plus the metadata fields already supported (`base-uri`, `req-uri-template`, `conf-uri-template`,
+`clauses`, `doc-number`, etc.).
+
+### Output
+
+Each standard is written to `<build-dir>/<id>/index.html` (even when there is only one), and
+`<build-dir>/index.html` lists the available standards. `<build-dir>` defaults to `standards`.
+Any failure aborts the run without writing the top-level index. Folders of standards that no
+longer exist are removed, but only if this tool created them (they contain a `.specgen` marker).
 
 ### Options
 
 | Option | Description |
 |---|---|
 | `--register REGISTER_JSON` | Path to compiled `register.json` **(required)** |
-| `--prefix PREFIX` | BB identifier prefix to select a standard (required when the register contains multiple standards) |
-| `--build-dir DIR` | Output directory (default: `build/standard`) |
+| `--standards-file STANDARDS_YAML` | Standards definitions (default: `standards.yaml` in the repo root) |
+| `--root-dir DIR` | Repo root (default: the parent of the `register.json` directory) |
+| `--only ID` | Generate only this standard id (repeatable; default: all) |
+| `--build-dir DIR` | Output directory (default: `standards`) |
 | `--extra-register REGISTER_JSON` | Additional compiled `register.json` files to import for cross-register bblock resolution (repeatable) |
 | `-v`, `--verbose` | Enable debug logging |
 
@@ -72,9 +92,39 @@ The generated document is written to `build/standard/index.html` by default.
 # From the root of an ogcapi-processes-standard-as-bblocks checkout:
 bblocks-postprocess   # produces build-local/register.json
 
-bblocks-specgen \
-  --register build-local/register.json \
-  --build-dir build/standard
+bblocks-specgen --register build-local/register.json
 
-open build/standard/index.html
+open standards/index.html
 ```
+
+## As a bblocks-postprocess build plugin
+
+`standard_gen.plugin.SpecgenBuildPlugin` runs the same generation as a
+[build (lifecycle-hook) plugin](https://github.com/opengeospatial/bblocks-postprocess-action/blob/develop/docs/implemented/build-lifecycle-hooks.md),
+firing at `after_run` — once, on a successful `bblocks-postprocess` run, right
+after the final `register.json` (post-uplift) is available — instead of being
+invoked by hand afterward. `Assembler`/`Renderer` are unchanged; the
+CLI and the plugin both funnel through the same `standard_gen.generate.generate()`
+entry point, so behavior is identical either way.
+
+Requires a `v1.*.*`-or-later `bblocks-postprocess` release with build-plugin
+support (see that repo's CLAUDE.md "Releasing" section — the mechanism only
+reaches `full@v1`/`postprocess@v1` consumers once a release tag has shipped).
+
+Declare it in the register repo's `bblocks-config.yaml`. All `config` keys are optional
+(the values shown are the defaults); `config` requires `bblocks-postprocess` v1.1.8 or later:
+
+```yaml
+plugins:
+  build:
+    - classes: [standard_gen.plugin.SpecgenBuildPlugin]
+      pip: [bblocks-specgen @ git+https://github.com/opengeospatial/bblocks-specgen]
+      config:
+        standards-file: standards.yaml   # relative to the repo root
+        build-dir: standards             # relative to the repo root, or absolute
+        only: []                         # standard ids to generate (default: all)
+        extra-registers: []              # register.json URLs or paths to import
+```
+
+Unknown config keys or wrong types abort the run. The standards definitions are read from
+`standards-file` (see [`standards.yaml`](#standardsyaml) above), not from `register.json`.

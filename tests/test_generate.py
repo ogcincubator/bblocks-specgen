@@ -1,0 +1,173 @@
+import tempfile
+import textwrap
+import unittest
+from pathlib import Path
+
+from standard_gen.generate import generate, load_standards
+from standard_gen.plugin import SpecgenBuildPlugin
+
+
+def _std(std_id, prefix=None, title=None):
+    return {
+        'id': std_id,
+        'prefix': prefix or f'test.{std_id}.',
+        'title': title or f'Standard {std_id} & co',
+        'doc-number': '24-001',
+        'base-uri': 'http://example.com/spec',
+        'req-uri-template': 'http://example.com/req/{class}',
+        'conf-uri-template': 'http://example.com/conf/{class}',
+        'clauses': [],
+    }
+
+
+class _TmpDirCase(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+
+    def write_standards(self, text):
+        path = self.root / 'standards.yaml'
+        path.write_text(textwrap.dedent(text), encoding='utf-8')
+        return path
+
+
+class LoadStandardsTest(_TmpDirCase):
+    def test_valid_list_and_mapping(self):
+        path = self.write_standards('''
+            - {id: a, prefix: x.a., title: A}
+            - {id: b_2-c, prefix: x.b., title: B}
+        ''')
+        self.assertEqual([s['id'] for s in load_standards(path)], ['a', 'b_2-c'])
+        path = self.write_standards('''
+            standards:
+              - {id: a, prefix: x.a., title: A}
+        ''')
+        self.assertEqual(len(load_standards(path)), 1)
+
+    def test_missing_id(self):
+        path = self.write_standards('- {prefix: x.a., title: A}')
+        with self.assertRaisesRegex(ValueError, "missing required 'id'"):
+            load_standards(path)
+
+    def test_duplicate_id(self):
+        path = self.write_standards('''
+            - {id: a, prefix: x.a., title: A}
+            - {id: a, prefix: x.b., title: B}
+        ''')
+        with self.assertRaisesRegex(ValueError, 'duplicate'):
+            load_standards(path)
+
+    def test_unsafe_id(self):
+        path = self.write_standards('- {id: ../evil, prefix: x., title: A}')
+        with self.assertRaisesRegex(ValueError, 'invalid id'):
+            load_standards(path)
+
+    def test_missing_title_and_prefix(self):
+        for entry, key in (('{id: a, prefix: x.}', 'title'), ('{id: a, title: A}', 'prefix')):
+            path = self.write_standards(f'- {entry}')
+            with self.assertRaisesRegex(ValueError, key):
+                load_standards(path)
+
+    def test_missing_file(self):
+        with self.assertRaises(FileNotFoundError):
+            load_standards(self.root / 'nope.yaml')
+
+
+class GenerateTest(_TmpDirCase):
+    register = {'bblocks': []}
+
+    def test_one_folder_per_standard_and_index(self):
+        build = self.root / 'standards'
+        out = generate(self.register, [_std('a'), _std('b')], source_dir=self.root, build_dir=build)
+        self.assertEqual(out, build / 'index.html')
+        self.assertTrue((build / 'a' / 'index.html').is_file())
+        self.assertTrue((build / 'b' / 'index.html').is_file())
+        index = out.read_text(encoding='utf-8')
+        self.assertIn('The following standards are available', index)
+        self.assertIn('href="a/index.html"', index)
+        self.assertIn('href="b/index.html"', index)
+        self.assertIn('Standard a &amp; co', index)  # escaped
+        self.assertIn('24-001', index)  # subtitle
+
+    def test_single_standard_still_gets_folder_and_index(self):
+        build = self.root / 'standards'
+        generate(self.register, [_std('only')], source_dir=self.root, build_dir=build)
+        self.assertTrue((build / 'only' / 'index.html').is_file())
+        self.assertIn('href="only/index.html"', (build / 'index.html').read_text(encoding='utf-8'))
+
+    def test_only_filter(self):
+        build = self.root / 'standards'
+        generate(self.register, [_std('a'), _std('b')], source_dir=self.root, build_dir=build,
+                 only=['b'])
+        self.assertFalse((build / 'a').exists())
+        self.assertTrue((build / 'b' / 'index.html').is_file())
+
+    def test_only_unknown_id(self):
+        with self.assertRaisesRegex(ValueError, 'Unknown standard id'):
+            generate(self.register, [_std('a')], source_dir=self.root,
+                     build_dir=self.root / 'standards', only=['zzz'])
+
+    def test_failure_aborts_without_index(self):
+        build = self.root / 'standards'
+        broken = _std('b')
+        del broken['base-uri']
+        with self.assertRaises(KeyError):
+            generate(self.register, [_std('a'), broken], source_dir=self.root, build_dir=build)
+        self.assertFalse((build / 'index.html').exists())
+
+    def test_stale_cleanup_only_touches_marked_folders(self):
+        build = self.root / 'standards'
+        generate(self.register, [_std('old'), _std('keep')], source_dir=self.root, build_dir=build)
+        (build / 'handmade').mkdir()
+        (build / 'handmade' / 'x.txt').write_text('mine')
+        generate(self.register, [_std('keep')], source_dir=self.root, build_dir=build)
+        self.assertFalse((build / 'old').exists())
+        self.assertTrue((build / 'keep').exists())
+        self.assertTrue((build / 'handmade' / 'x.txt').exists())
+
+    def test_build_dir_outside_root_is_allowed(self):
+        with tempfile.TemporaryDirectory() as other:
+            generate(self.register, [_std('a')], source_dir=self.root, build_dir=Path(other) / 'out')
+            self.assertTrue((Path(other) / 'out' / 'a' / 'index.html').is_file())
+
+    def test_build_dir_containing_root_is_rejected(self):
+        for bad in (self.root, self.root.parent):
+            with self.assertRaisesRegex(ValueError, 'contains the repository root'):
+                generate(self.register, [_std('a')], source_dir=self.root, build_dir=bad)
+
+
+class PluginTest(_TmpDirCase):
+    def test_config_validation(self):
+        SpecgenBuildPlugin()
+        SpecgenBuildPlugin({})
+        SpecgenBuildPlugin({'build-dir': 'out', 'only': ['a'], 'extra-registers': []})
+        with self.assertRaisesRegex(ValueError, 'Unknown'):
+            SpecgenBuildPlugin({'build_dir': 'out'})
+        with self.assertRaises(TypeError):
+            SpecgenBuildPlugin({'only': 'a'})
+        with self.assertRaises(TypeError):
+            SpecgenBuildPlugin({'build-dir': 3})
+
+    def test_after_run_uses_root_dir_defaults(self):
+        self.write_standards('''
+            - {id: a, prefix: x.a., title: A, base-uri: http://e/, req-uri-template: r, conf-uri-template: c, clauses: []}
+        ''')
+        SpecgenBuildPlugin().after_run({'bblocks': []}, {'rootDir': str(self.root)})
+        self.assertTrue((self.root / 'standards' / 'a' / 'index.html').is_file())
+        self.assertTrue((self.root / 'standards' / 'index.html').is_file())
+
+    def test_after_run_custom_standards_file(self):
+        (self.root / 'conf').mkdir()
+        (self.root / 'conf' / 's.yaml').write_text(
+            '- {id: z, prefix: x.z., title: Z, base-uri: http://e/, '
+            'req-uri-template: r, conf-uri-template: c, clauses: []}\n')
+        SpecgenBuildPlugin({'standards-file': 'conf/s.yaml', 'build-dir': 'out'}).after_run(
+            {'bblocks': []}, {'rootDir': str(self.root)})
+        self.assertTrue((self.root / 'out' / 'z' / 'index.html').is_file())
+
+    write_standards = _TmpDirCase.write_standards
+
+
+if __name__ == '__main__':
+    unittest.main()
