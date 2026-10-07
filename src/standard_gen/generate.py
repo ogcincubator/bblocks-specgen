@@ -117,7 +117,7 @@ def _remove_stale(build_dir: Path, current_ids: set[str]) -> None:
             shutil.rmtree(child)
 
 
-def generate(
+def generate_standards(
     register: dict,
     standards: list[dict],
     *,
@@ -126,7 +126,7 @@ def generate(
     only: Optional[Sequence[str]] = None,
     extra_registers: Sequence[dict] = (),
     templates_dir: Path = _TEMPLATES_DIR,
-) -> Path:
+) -> list[dict]:
     """
     Render OGC standards documents from an already-parsed compiled register
     and the (validated, see load_standards()) standards definitions.
@@ -144,7 +144,8 @@ def generate(
     source_dir is the repo root that the register's local (non-published)
     resources resolve against - see Resolver.local_path().
 
-    Returns the path to the top-level index.html.
+    Returns one entry per generated standard (id, title, subtitle, version, status,
+    doc-number); the top-level index.html is written to build_dir.
     """
     if only:
         known = {s['id'] for s in standards}
@@ -177,12 +178,20 @@ def generate(
             'id': std_id,
             'title': metadata.title,
             'subtitle': _subtitle(metadata),
+            'version': metadata.version,
+            'status': metadata.status,
+            'doc-number': metadata.doc_number,
         })
 
     _render_index(entries, build_dir, templates_dir)
     if not only:
         _remove_stale(build_dir, {e['id'] for e in entries})
 
-    out = build_dir / 'index.html'
-    logger.info("Written %s", out)
-    return out
+    logger.info("Written %s", build_dir / 'index.html')
+    return entries
+
+
+def generate(*args, **kwargs) -> Path:
+    """generate_standards(), returning the path to the top-level index.html."""
+    generate_standards(*args, **kwargs)
+    return kwargs['build_dir'] / 'index.html'

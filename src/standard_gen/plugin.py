@@ -5,7 +5,9 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from .generate import DEFAULT_BUILD_DIR, DEFAULT_STANDARDS_FILE, generate, load_standards
+from urllib.parse import urljoin
+
+from .generate import DEFAULT_BUILD_DIR, DEFAULT_STANDARDS_FILE, generate_standards, load_standards
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +32,18 @@ class SpecgenBuildPlugin:
                 extra-registers: []              # register.json URLs/paths to import
 
     Needs a bblocks-postprocess release that passes a build plugin entry's
-    `config` to the constructor (v1.1.8 or later).
+    `config` to the constructor (v1.1.8 or later) and supports the
+    after_register hook.
 
-    Runs at after_run - once, only on a successful postprocess run, after
-    uplift (and the optional SPARQL push) - with the final register.json
-    content and the run's context. The standards definitions are read from
-    standards-file (see generate.load_standards()), not from the register.
-    Each standard is written to <build-dir>/<id>/, with an index of all of
-    them at <build-dir>/index.html.
+    Runs at after_register - once, with the assembled register just before it
+    is written to register.json (and so before semantic uplift) - and returns
+    the register with a top-level `standards` list added: one entry per
+    generated standard with its id, title, version, status, doc-number, the
+    `path` of its folder relative to the repository root and, when the register
+    has a baseURL and the build dir is inside the repository, its published
+    `url`. The standards definitions are read from standards-file (see
+    generate.load_standards()), not from the register. Each standard is written
+    to <build-dir>/<id>/, with an index of all of them at <build-dir>/index.html.
     """
 
     def __init__(self, config: Optional[dict] = None):
@@ -68,21 +74,45 @@ class SpecgenBuildPlugin:
             raise TypeError(f"SpecgenBuildPlugin config '{key}' must be a list of strings")
         return value
 
-    def after_run(self, register: dict, context: dict) -> None:
+    def after_register(self, register: dict, context: dict) -> dict:
         root_dir = Path(context['rootDir'])
 
         standards = load_standards(root_dir / self._standards_file)
         extra_registers = [self._load_extra_register(ref, root_dir) for ref in self._extra_registers]
 
-        out = generate(
+        build_dir = root_dir / self._build_dir  # an absolute build-dir wins
+        entries = generate_standards(
             register,
             standards,
             source_dir=root_dir,
-            build_dir=root_dir / self._build_dir,  # an absolute build-dir wins
+            build_dir=build_dir,
             only=self._only,
             extra_registers=extra_registers,
         )
-        logger.info("Generated standards index: %s", out)
+        return {**register, 'standards': self._index(register, root_dir, build_dir, entries)}
+
+    @staticmethod
+    def _index(register: dict, root_dir: Path, build_dir: Path, entries: list[dict]) -> list[dict]:
+        try:
+            rel_build = build_dir.resolve().relative_to(root_dir.resolve()).as_posix()
+        except ValueError:
+            rel_build = None  # outside the repository: nothing to publish a URL for
+        base_url = register.get('baseURL')
+
+        index = []
+        for entry in entries:
+            item = {
+                'id': entry['id'],
+                'title': entry['title'],
+                **{k: entry[k] for k in ('version', 'status', 'doc-number') if entry.get(k)},
+            }
+            if rel_build is not None:
+                path = f"{rel_build}/{entry['id']}"
+                item['path'] = path
+                if base_url:
+                    item['url'] = urljoin(base_url.rstrip('/') + '/', path + '/')
+            index.append(item)
+        return index
 
     @staticmethod
     def _load_extra_register(ref: str, root_dir: Path) -> dict:

@@ -151,20 +151,39 @@ class PluginTest(_TmpDirCase):
         with self.assertRaises(TypeError):
             SpecgenBuildPlugin({'build-dir': 3})
 
-    def test_after_run_uses_root_dir_defaults(self):
+    def test_after_register_uses_root_dir_defaults_and_indexes_standards(self):
         self.write_standards('''
             - {id: a, prefix: x.a., title: A, base-uri: http://e/, req-uri-template: r, conf-uri-template: c, clauses: []}
         ''')
-        SpecgenBuildPlugin().after_run({'bblocks': []}, {'rootDir': str(self.root)})
+        register = {'bblocks': [], 'baseURL': 'http://e/site/'}
+        result = SpecgenBuildPlugin().after_register(register, {'rootDir': str(self.root)})
         self.assertTrue((self.root / 'standards' / 'a' / 'index.html').is_file())
         self.assertTrue((self.root / 'standards' / 'index.html').is_file())
+        self.assertEqual(result['standards'], [{
+            'id': 'a', 'title': 'A', 'status': 'Draft',
+            'path': 'standards/a', 'url': 'http://e/site/standards/a/',
+        }])
+        self.assertNotIn('standards', register)
+        self.assertEqual(result['bblocks'], [])
 
-    def test_after_run_custom_standards_file(self):
+    def test_after_register_without_base_url_or_outside_root_has_no_url(self):
+        self.write_standards('''
+            - {id: a, prefix: x.a., title: A, base-uri: http://e/, req-uri-template: r, conf-uri-template: c, clauses: []}
+        ''')
+        result = SpecgenBuildPlugin().after_register({'bblocks': []}, {'rootDir': str(self.root)})
+        self.assertEqual(result['standards'][0]['path'], 'standards/a')
+        self.assertNotIn('url', result['standards'][0])
+        with tempfile.TemporaryDirectory() as other:
+            result = SpecgenBuildPlugin({'build-dir': other}).after_register(
+                {'bblocks': [], 'baseURL': 'http://e/'}, {'rootDir': str(self.root)})
+        self.assertEqual(set(result['standards'][0]), {'id', 'title', 'status'})
+
+    def test_after_register_custom_standards_file(self):
         (self.root / 'conf').mkdir()
         (self.root / 'conf' / 's.yaml').write_text(
             '- {id: z, prefix: x.z., title: Z, base-uri: http://e/, '
             'req-uri-template: r, conf-uri-template: c, clauses: []}\n')
-        SpecgenBuildPlugin({'standards-file': 'conf/s.yaml', 'build-dir': 'out'}).after_run(
+        SpecgenBuildPlugin({'standards-file': 'conf/s.yaml', 'build-dir': 'out'}).after_register(
             {'bblocks': []}, {'rootDir': str(self.root)})
         self.assertTrue((self.root / 'out' / 'z' / 'index.html').is_file())
 

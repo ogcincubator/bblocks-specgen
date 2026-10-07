@@ -153,9 +153,12 @@ open standards/index.html
 
 `standard_gen.plugin.SpecgenBuildPlugin` runs the same generation as a
 [build (lifecycle-hook) plugin](https://github.com/opengeospatial/bblocks-postprocess-action/blob/develop/docs/implemented/build-lifecycle-hooks.md),
-firing at `after_run` — once, on a successful `bblocks-postprocess` run, right
-after the final `register.json` (post-uplift) is available — instead of being
-invoked by hand afterward. `Assembler`/`Renderer` are unchanged; the
+firing at `after_register` — once, with the assembled register just before it is
+written to `register.json` (and before semantic uplift) — instead of being invoked by
+hand afterward. The hook returns the register with a top-level `standards` list added
+(`id`, `title`, `version`, `status`, `doc-number`, `path` relative to the repository root,
+and `url` when the register has a `baseURL`), so the published `register.json` is an
+index of the generated standards. `Assembler`/`Renderer` are unchanged; the
 CLI and the plugin both funnel through the same `standard_gen.generate.generate()`
 entry point, so behavior is identical either way.
 
