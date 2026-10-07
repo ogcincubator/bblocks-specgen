@@ -10,6 +10,7 @@ from typing import Optional
 from jinja2 import Environment, FileSystemLoader
 
 from .figures import FigureRegistry, ASSETS_DIR, make_markdown
+from .ontology import ontology_tables
 from .models import StandardDocument, SubSection
 from .resolver import Resolver, _slugify
 
@@ -130,6 +131,7 @@ class Renderer:
         self._env.globals['render_markdown'] = self._render_and_resolve
         self._env.globals['get_viewer_url'] = resolver.get_bblock_viewer_url
         self._env.globals['get_property_table'] = self._get_property_table
+        self._env.globals['get_ontology_table'] = self._get_ontology_table
 
     def _render_and_resolve(self, text: str, bblock_id: Optional[str] = None) -> str:
         normalized = _normalize_headings(text)
@@ -166,6 +168,15 @@ class Renderer:
                 'required': name in required,
             })
         return {'properties': props}
+
+    def _get_ontology_table(self, applies_to) -> Optional[dict]:
+        """Return {classes, properties} from the bblock's ontology, or None."""
+        if not applies_to or not applies_to.bblock:
+            return None
+        turtle = self._resolver.get_bblock_ontology(applies_to.bblock)
+        if not turtle:
+            return None
+        return ontology_tables(turtle)
 
     def _populate_subsections(self, doc: StandardDocument) -> None:
         """Extract top-level subheadings from clause markdown for ToC nesting."""

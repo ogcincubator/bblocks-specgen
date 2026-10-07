@@ -186,6 +186,18 @@ class Resolver:
             logger.warning("Could not fetch schema for %s: %s", identifier, e)
             return None
 
+    def get_bblock_ontology(self, identifier: str) -> Optional[str]:
+        """Turtle text of the bblock's ontology, or None if it has none."""
+        bb = self.get_bblock(identifier)
+        url = bb.get('ontology') if bb else None
+        if not url:
+            return None
+        try:
+            return self.fetch(url)
+        except Exception as e:
+            logger.warning("Could not fetch ontology for %s: %s", identifier, e)
+            return None
+
 
 def _slugify(s: str) -> str:
     return re.sub(r'[^a-z0-9]+', '-', s.lower()).strip('-')

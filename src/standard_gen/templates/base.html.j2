@@ -260,6 +260,40 @@
           {% endfor %}
         </tbody>
       </table>
+      {% else %}
+      {% set onto = get_ontology_table(req.applies_to) %}
+      {% if onto %}
+      {% macro term_link(t) %}<a href="{{ t.uri }}"><code>{{ t.curie }}</code></a>{% endmacro %}
+      {% if onto.classes %}
+      <table class="property-table ontology-table">
+        <thead><tr><th>Class</th><th>Subclass of</th><th>Definition</th></tr></thead>
+        <tbody>
+          {% for c in onto.classes %}
+          <tr>
+            <td>{{ term_link(c.term) }}<br>{{ c.term.label if c.term.label != c.term.curie }}</td>
+            <td>{% for t in c.parents %}{{ term_link(t) }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+            <td>{{ c.definition }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+      {% if onto.properties %}
+      <table class="property-table ontology-table">
+        <thead><tr><th>Property</th><th>Domain</th><th>Range</th><th>Definition</th></tr></thead>
+        <tbody>
+          {% for p in onto.properties %}
+          <tr>
+            <td>{{ term_link(p.term) }}<br>{{ p.term.label if p.term.label != p.term.curie }}</td>
+            <td>{% for t in p.domain %}{{ term_link(t) }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+            <td>{% for t in p.range %}{{ term_link(t) }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+            <td>{{ p.definition }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+      {% endif %}
       {% endif %}
       {% endif %}
       {% if req.note %}

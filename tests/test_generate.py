@@ -228,6 +228,33 @@ class RequirementsDetectionTest(_TmpDirCase):
             )
         self.assertEqual(html.count('class="figure-ref">Figure 1</a>'), 2)
 
+    def test_ontology_tables_for_model_block_without_schema(self):
+        ttl = (
+            '@prefix ex: <http://example.com/o#> .\n'
+            '@prefix owl: <http://www.w3.org/2002/07/owl#> .\n'
+            '@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n'
+            '@prefix skos: <http://www.w3.org/2004/02/skos/core#> .\n'
+            'ex:Thing a owl:Class ; rdfs:label "Thing"@en ; skos:definition "A thing."@en .\n'
+            'ex:Gadget a owl:Class ; rdfs:label "Gadget"@fr, "Gadget EN"@en ;\n'
+            '  rdfs:subClassOf ex:Thing, [ a owl:Restriction ] ; skos:definition "A gadget."@en .\n'
+            'ex:partOf a owl:ObjectProperty ; rdfs:label "part of"@en ;\n'
+            '  rdfs:domain ex:Gadget ; rdfs:range ex:Thing ; skos:definition "Containment."@en .\n'
+        )
+        (self.root / 'onto.ttl').write_text(ttl, encoding='utf-8')
+        report, html = self._generate(
+            {'test.s.m': {'itemClass': 'model', 'ontology': f'{self.BASE}onto.ttl'}},
+            {
+                'test.s.m/requirements.yaml': (
+                    'requirements:\n  - {id: r1, statement: x, applies-to: {bblock: test.s.m}}\n'),
+            },
+        )
+        self.assertIn('ontology-table', html)
+        self.assertIn('<code>ex:Gadget</code>', html)
+        self.assertIn('Gadget EN', html)
+        self.assertIn('A gadget.', html)
+        self.assertIn('<code>ex:partOf</code>', html)
+        self.assertIn('Containment.', html)
+
     def test_class_id_explicit_and_default(self):
         report, html = self._generate(
             {'test.s.a.b': {'itemClass': 'model'}, 'test.s.c': {'itemClass': 'model'}},

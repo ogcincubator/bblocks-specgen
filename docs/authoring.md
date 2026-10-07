@@ -260,6 +260,16 @@ A requirements class is not tied to `itemClass: requirements-class`. A block of 
 and keeps all of its normal bblock content (schema, ontology, examples, tests). Set
 `class-id` explicitly when its identifier does not carry a meaningful class path.
 
+### Ontology tables
+
+A requirement with `applies-to: {bblock: <id>}` gets a property table built from the block's
+JSON Schema. If the block has no schema properties but does have an `ontology` in the
+register (an `ontology.ttl`), the requirement gets a "classes" table (subclass-of,
+definition) and a "properties" table (domain, range, definition) instead, listing the terms
+the ontology itself defines (named classes and object/datatype/annotation properties).
+Labels and definitions prefer English. The tables list the whole ontology, so a block
+with several requirements that apply to it repeats the tables in each.
+
 ## A minimal complete example
 
 `bblocks-config.yaml` (excerpt):
