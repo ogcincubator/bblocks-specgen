@@ -446,6 +446,7 @@ class Loader:
                     req_id_slug=req.id_slug,
                     test_purpose=req.statement,
                     test_resources=req.test_resources,
+                    bblock_id=rc.bblock_id,
                 ))
         return AnnexA(entries=entries)
 

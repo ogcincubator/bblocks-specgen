@@ -43,6 +43,9 @@ class ATSEntry:
     req_id_slug: str
     test_purpose: str
     test_resources: list[TestResource] = field(default_factory=list)
+    # Block whose requirement this tests; relative links/images in test_purpose
+    # (a copy of the requirement statement) resolve against it.
+    bblock_id: Optional[str] = None
 
 
 @dataclass

@@ -178,7 +178,7 @@ if __name__ == '__main__':
 class RequirementsDetectionTest(_TmpDirCase):
     BASE = 'http://example.com/src/'
 
-    def _generate(self, blocks, files):
+    def _generate(self, blocks, files, annex=False):
         for rel, text in files.items():
             path = self.root / rel
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -194,7 +194,7 @@ class RequirementsDetectionTest(_TmpDirCase):
         std = _std('s', prefix='test.s.')
         std['req-uri-template'] = 'http://example.com/req/{id}'
         std['conf-uri-template'] = 'http://example.com/conf/{id}'
-        std['clauses'] = [{'bblock': i} for i in blocks]
+        std['clauses'] = [{'bblock': i} for i in blocks] + ([{'auto': 'annex-a'}] if annex else [])
         out = generate(register, [std], source_dir=self.root, build_dir=self.root / 'out')
         report = json.loads((out.parent / 's' / 'report.json').read_text())
         html = (out.parent / 's' / 'index.html').read_text()
@@ -213,6 +213,20 @@ class RequirementsDetectionTest(_TmpDirCase):
         self.assertEqual(report['test.s.co']['role'], 'requirements-class')
         self.assertEqual(report['test.s.intro']['role'], 'prose')
         self.assertIn('http://example.com/conf/co', html)
+
+    def test_figure_link_in_requirement_resolves_in_ats_annex(self):
+        with self.assertNoLogs('standard_gen.figures', level='WARNING'):
+            report, html = self._generate(
+                {'test.s.m': {'itemClass': 'model'}},
+                {
+                    'test.s.m/requirements.yaml': (
+                        'requirements:\n  - {id: r1, statement: "Use [](assets/a.png)."}\n'),
+                    'test.s.m/description.md': '![Cap](assets/a.png)\n',
+                    'test.s.m/assets/a.png': 'x',
+                },
+                annex=True,
+            )
+        self.assertEqual(html.count('class="figure-ref">Figure 1</a>'), 2)
 
     def test_class_id_explicit_and_default(self):
         report, html = self._generate(

@@ -315,7 +315,7 @@
         </tr>
         <tr>
           <td>Test purpose</td>
-          <td>{{ render_markdown(entry.test_purpose) | safe }}</td>
+          <td>{{ render_markdown(entry.test_purpose, entry.bblock_id) | safe }}</td>
         </tr>
         {% if entry.test_resources %}
         <tr>

@@ -36,6 +36,9 @@ with requirements, conformance class table, and an abstract test suite annex.
 - [ ] Unit tests (`test_resolver.py`, `test_assembler.py`)
 - [ ] PDF output via WeasyPrint
 
+See [docs/authoring.md](docs/authoring.md) for the full authoring guide: `standards.yaml`,
+`requirements.yaml`, `terms.yaml`, `references.yaml`, figures, and a worked example.
+
 ## Installation
 
 ```bash
