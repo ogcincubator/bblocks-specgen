@@ -267,8 +267,15 @@ JSON Schema. If the block has no schema properties but does have an `ontology` i
 register (an `ontology.ttl`), the requirement gets a "classes" table (subclass-of,
 definition) and a "properties" table (domain, range, definition) instead, listing the terms
 the ontology itself defines (named classes and object/datatype/annotation properties).
-Labels and definitions prefer English. The tables list the whole ontology, so a block
-with several requirements that apply to it repeats the tables in each.
+Labels and definitions prefer English. By default the tables list the whole ontology; add
+`terms` to `applies-to` to list only some of it (local names, or CURIEs whose prefix is
+ignored):
+
+```yaml
+applies-to:
+  bblock: my.std.model
+  terms: [CoordinateOperation, geosrs:SingleOperation]
+```
 
 ## A minimal complete example
 

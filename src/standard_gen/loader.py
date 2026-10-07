@@ -319,6 +319,7 @@ class Loader:
                 applies_to = AppliesTo(
                     bblock=at.get('bblock', ''),
                     json_path=at.get('json-path'),
+                    terms=[str(t) for t in at.get('terms') or []],
                 )
 
             req = Requirement(

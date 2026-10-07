@@ -7,6 +7,7 @@ from typing import Optional, Any
 class AppliesTo:
     bblock: str
     json_path: Optional[str] = None
+    terms: list[str] = field(default_factory=list)
 
 
 @dataclass

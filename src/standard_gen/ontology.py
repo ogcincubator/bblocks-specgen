@@ -1,6 +1,7 @@
 """Extract a classes-and-properties summary from an ontology (Turtle)."""
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from rdflib import BNode, Graph, Literal, URIRef
@@ -46,12 +47,17 @@ def _terms(graph: Graph, subject, predicate) -> list[dict]:
     return [_term(graph, n) for n in nodes]
 
 
-def ontology_tables(turtle: str) -> Optional[dict]:
+def _local_name(term: str) -> str:
+    return re.split(r'[#/:]', term.rstrip('/#'))[-1]
+
+
+def ontology_tables(turtle: str, only: Optional[list[str]] = None) -> Optional[dict]:
     """Return {'classes': [...], 'properties': [...]} for the terms the ontology defines.
 
     Only URI subjects typed as classes or properties are listed; each entry is
     {term, kind?, definition, superclasses|superproperties, domain, range}.
-    Returns None if nothing is defined.
+    `only` restricts the result to terms with these local names (a CURIE or URI is
+    reduced to its local name). Returns None if nothing is left.
     """
     graph = Graph()
     graph.parse(data=turtle, format='turtle')
@@ -82,6 +88,10 @@ def ontology_tables(turtle: str) -> Optional[dict]:
                 'range': _terms(graph, subject, RDFS.range),
             })
 
+    if only:
+        wanted = {_local_name(t) for t in only}
+        classes = [c for c in classes if _local_name(c['term']['uri']) in wanted]
+        properties = [p for p in properties if _local_name(p['term']['uri']) in wanted]
     for entries in (classes, properties):
         entries.sort(key=lambda e: e['term']['curie'].lower())
     if not classes and not properties:

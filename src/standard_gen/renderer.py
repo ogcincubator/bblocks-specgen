@@ -176,7 +176,7 @@ class Renderer:
         turtle = self._resolver.get_bblock_ontology(applies_to.bblock)
         if not turtle:
             return None
-        return ontology_tables(turtle)
+        return ontology_tables(turtle, applies_to.terms or None)
 
     def _populate_subsections(self, doc: StandardDocument) -> None:
         """Extract top-level subheadings from clause markdown for ToC nesting."""

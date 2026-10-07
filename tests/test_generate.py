@@ -245,7 +245,7 @@ class RequirementsDetectionTest(_TmpDirCase):
             {'test.s.m': {'itemClass': 'model', 'ontology': f'{self.BASE}onto.ttl'}},
             {
                 'test.s.m/requirements.yaml': (
-                    'requirements:\n  - {id: r1, statement: x, applies-to: {bblock: test.s.m}}\n'),
+                    'requirements:\n  - {id: r1, statement: x, applies-to: {bblock: test.s.m, terms: [ex:Gadget, partOf]}}\n'),
             },
         )
         self.assertIn('ontology-table', html)
@@ -254,6 +254,7 @@ class RequirementsDetectionTest(_TmpDirCase):
         self.assertIn('A gadget.', html)
         self.assertIn('<code>ex:partOf</code>', html)
         self.assertIn('Containment.', html)
+        self.assertNotIn('A thing.', html)
 
     def test_class_id_explicit_and_default(self):
         report, html = self._generate(
