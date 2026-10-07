@@ -81,6 +81,29 @@ rendered is decided from its content, not from a `standards.yaml` entry:
 `/conf/<id>` URIs. If omitted, it defaults to the block identifier with the standard's `prefix`
 removed (dots become `/`).
 
+### Figures
+
+An image alone in its paragraph with a caption (`![Caption text](assets/diagram.png)`) is rendered
+as a numbered figure, with the caption below it: "Figure 3 — Caption text" ("Figure A.1" in annexes).
+Captions may contain inline Markdown. An image without a caption, or one inside running text, is
+rendered as a plain `<img>`.
+
+Image paths are resolved relative to the block's source directory. Local images are copied to
+`<id>/assets/<block>/`; a missing image aborts the run. Remote URLs are left as they are.
+
+To refer to a figure from the text, link to the same image path; the link is replaced by a link to
+the figure, whose text is "Figure N" if the link text is empty (link text, if given, is kept):
+
+```markdown
+The classes are shown in [](assets/core.png).
+```
+
+Because this is an ordinary link, it also works when the Markdown is viewed outside specgen.
+To give a figure a stable anchor, or to disambiguate when the same image is used twice, add an
+explicit id, `![Caption](assets/core.png){#fig-core}`, and link to it with `[](#fig-core)`.
+References can point forward to figures that appear later in the document. A link to an image
+that is not a figure produces a warning.
+
 ### Output
 
 Each standard is written to `<build-dir>/<id>/index.html` (even when there is only one), and

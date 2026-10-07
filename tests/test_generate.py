@@ -224,3 +224,53 @@ class RequirementsDetectionTest(_TmpDirCase):
         )
         self.assertIn('/conf/a/b', html)
         self.assertIn('/conf/custom', html)
+
+
+class FiguresTest(_TmpDirCase):
+    BASE = 'http://example.com/src/'
+
+    def _generate(self, descriptions, clauses=None):
+        blocks = []
+        for ident, text in descriptions.items():
+            d = self.root / ident
+            d.mkdir(parents=True, exist_ok=True)
+            (d / 'description.md').write_text(text, encoding='utf-8')
+            (d / 'assets').mkdir(exist_ok=True)
+            (d / 'assets' / 'a.png').write_bytes(b'PNG-' + ident.encode())
+            blocks.append({'itemIdentifier': ident, 'name': ident,
+                           'sourceFiles': f'{self.BASE}{ident}/'})
+        register = {'baseURL': self.BASE, 'bblocks': blocks}
+        std = _std('s', prefix='test.s.')
+        std['clauses'] = clauses or [{'bblock': b['itemIdentifier']} for b in blocks]
+        out = generate(register, [std], source_dir=self.root, build_dir=self.root / 'out')
+        return out.parent / 's'
+
+    def test_caption_numbering_assets_and_forward_reference(self):
+        out = self._generate({
+            'test.s.one': 'See [](#fig-two) and [the first](assets/a.png).\n\n'
+                          '![First *diagram*](assets/a.png)\n',
+            'test.s.two': '![Second](assets/a.png){#fig-two}\n\n![](assets/a.png)\n',
+        })
+        html = (out / 'index.html').read_text()
+        self.assertIn('<figcaption>Figure 1 — First <em>diagram</em></figcaption>', html)
+        self.assertIn('<figcaption>Figure 2 — Second</figcaption>', html)
+        self.assertIn('<a href="#fig-two" class="figure-ref">Figure 2</a>', html)
+        self.assertIn('<a href="#fig-a" class="figure-ref">the first</a>', html)
+        # uncaptioned image: plain img, not a figure
+        self.assertEqual(html.count('<figure '), 2)
+        self.assertIn('src="assets/test-s-one/a.png"', html)
+        self.assertEqual((out / 'assets/test-s-one/a.png').read_bytes(), b'PNG-test.s.one')
+        self.assertEqual((out / 'assets/test-s-two/a.png').read_bytes(), b'PNG-test.s.two')
+
+    def test_missing_image_aborts(self):
+        with self.assertRaises(FileNotFoundError):
+            self._generate({'test.s.one': '![Cap](assets/missing.png)\n'})
+
+    def test_annex_figures_are_lettered(self):
+        out = self._generate(
+            {'test.s.body': '![Body](assets/a.png)\n', 'test.s.annex': '![Extra](assets/a.png)\n'},
+            clauses=[{'bblock': 'test.s.body'}, {'auto': 'annex-a'}, {'bblock': 'test.s.annex'}],
+        )
+        html = (out / 'index.html').read_text()
+        self.assertIn('Figure 1 — Body', html)
+        self.assertIn('Figure B.1 — Extra', html)

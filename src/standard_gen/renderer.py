@@ -8,14 +8,14 @@ from pathlib import Path
 from typing import Optional
 
 from jinja2 import Environment, FileSystemLoader
-from markdown_it import MarkdownIt
 
+from .figures import FigureRegistry, ASSETS_DIR, make_markdown
 from .models import StandardDocument, SubSection
 from .resolver import Resolver, _slugify
 
 logger = logging.getLogger(__name__)
 
-_md = MarkdownIt().enable('table')
+_md = make_markdown()
 
 _REQUIREMENTS_MARKER = '<!-- requirements -->'
 
@@ -25,10 +25,10 @@ _HEADING_LINE_RE = re.compile(r'^(#{1,6})[ \t]+(.+)', re.MULTILINE)
 _HEADING_TAG_RE = re.compile(r'<(h[1-6])>(.*?)</\1>', re.DOTALL)
 
 
-def _render_markdown(text: str) -> str:
+def _render_markdown(text: str, env: Optional[dict] = None) -> str:
     if not text:
         return ''
-    return _md.render(text)
+    return _md.render(text, env if env is not None else {})
 
 
 def _normalize_headings(md_text: str, target_min: int = 3) -> str:
@@ -116,6 +116,7 @@ def navigate_schema(schema: dict, json_path: str) -> Optional[dict]:
 class Renderer:
     def __init__(self, resolver: Resolver, templates_dir: Path):
         self._resolver = resolver
+        self._figures: Optional[FigureRegistry] = None
         self._templates_dir = templates_dir
         self._env = Environment(
             loader=FileSystemLoader(str(templates_dir)),
@@ -130,9 +131,9 @@ class Renderer:
         self._env.globals['get_viewer_url'] = resolver.get_bblock_viewer_url
         self._env.globals['get_property_table'] = self._get_property_table
 
-    def _render_and_resolve(self, text: str) -> str:
+    def _render_and_resolve(self, text: str, bblock_id: Optional[str] = None) -> str:
         normalized = _normalize_headings(text)
-        html = _render_markdown(normalized)
+        html = _render_markdown(normalized, {'figures': self._figures, 'bblock': bblock_id})
         html = _inject_heading_ids(html)
         return self._resolver.resolve_bblocks_links_in_html(html)
 
@@ -197,7 +198,21 @@ class Renderer:
         shutil.copy(css_src, build_dir / 'ogc-standard.css')
 
         template = self._env.get_template('base.html.j2')
+
+        # Two passes: the first numbers every figure in document order, the
+        # second renders with all figures known (so forward references work).
+        self._figures = FigureRegistry(self._resolver, {
+            s.content.bblock_id: s.number
+            for s in doc.sections if hasattr(s.content, 'bblock_id')
+        })
+        template.render(doc=doc)
+        self._figures.freeze()
         html = template.render(doc=doc)
+
+        assets_dir = build_dir / ASSETS_DIR
+        if assets_dir.is_dir() and (build_dir / '.specgen').is_file():
+            shutil.rmtree(assets_dir)
+        self._figures.copy_assets(build_dir)
 
         out = build_dir / 'index.html'
         out.write_text(html, encoding='utf-8')

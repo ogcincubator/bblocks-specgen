@@ -99,14 +99,14 @@
   {% if content_type == 'ProseClause' %}
   <section id="{{ section.anchor }}" {% if not content.normative %}class="informative"{% endif %}>
     <h2>{{ section.number }}. {{ section.title }}</h2>
-    {{ render_markdown(content.description_md) | safe }}
+    {{ render_markdown(content.description_md, content.bblock_id) | safe }}
   </section>
 
   {# ---- Terms clause ---- #}
   {% elif content_type == 'TermsClause' %}
   <section id="{{ section.anchor }}">
     <h2>{{ section.number }}. {{ section.title }}</h2>
-    {% if content.preamble_md %}{{ render_markdown(content.preamble_md) | safe }}{% endif %}
+    {% if content.preamble_md %}{{ render_markdown(content.preamble_md, content.bblock_id) | safe }}{% endif %}
     {% for term in content.terms %}
     <div class="term-entry" id="term-{{ term.term | lower | replace(' ', '-') }}">
       <span class="term-name">{{ term.term }}</span>:
@@ -135,7 +135,7 @@
   {% elif content_type == 'ReferencesClause' %}
   <section id="{{ section.anchor }}">
     <h2>{{ section.number }}. {{ section.title }}</h2>
-    {% if content.preamble_md %}{{ render_markdown(content.preamble_md) | safe }}{% endif %}
+    {% if content.preamble_md %}{{ render_markdown(content.preamble_md, content.bblock_id) | safe }}{% endif %}
     {% for ref in content.normative | sort(attribute='doc_id') %}
     <div class="reference-entry">
       <span class="ref-id">{% if ref.doc_id %}{{ ref.doc_id }}{% endif %}</span>
@@ -210,7 +210,7 @@
     </div>
 
     {# Intro prose (before <!-- requirements --> marker) #}
-    {{ render_markdown(content.description_md | split_intro) | safe }}
+    {{ render_markdown(content.description_md | split_intro, content.bblock_id) | safe }}
 
     {# Requirements heading — resets visual scope after any intro subheadings #}
     {% if content.requirements %}
@@ -228,7 +228,7 @@
       {% if req.condition %}
       <div class="req-condition">{{ req.condition }}</div>
       {% endif %}
-      <div class="req-statement">{{ render_markdown(req.statement) | safe }}</div>
+      <div class="req-statement">{{ render_markdown(req.statement, content.bblock_id) | safe }}</div>
       {% if req.applies_to %}
       <div class="req-applies-to">
         Applies to:
@@ -270,7 +270,7 @@
         {% for example in req.examples %}
         <div class="example">
           <h5 class="example-title">{{ example.title or 'Example' }}</h5>
-          {% if example.content %}{{ render_markdown(example.content) | safe }}{% endif %}
+          {% if example.content %}{{ render_markdown(example.content, content.bblock_id) | safe }}{% endif %}
           {% for snippet in example.snippets %}
           <pre><code class="language-{{ snippet.language }}">{{ snippet.code | e }}</code></pre>
           {% endfor %}
@@ -282,7 +282,7 @@
     {% endfor %}
 
     {# Outro prose (after <!-- requirements --> marker) #}
-    {{ render_markdown(content.description_md | split_outro) | safe }}
+    {{ render_markdown(content.description_md | split_outro, content.bblock_id) | safe }}
 
     {# Examples #}
     {% if content.examples %}
@@ -291,7 +291,7 @@
       {% for example in content.examples %}
       <div class="example">
         <h4 class="example-title">{{ example.title or 'Example' }}</h4>
-        {% if example.content %}{{ render_markdown(example.content) | safe }}{% endif %}
+        {% if example.content %}{{ render_markdown(example.content, content.bblock_id) | safe }}{% endif %}
         {% for snippet in example.snippets %}
         <pre><code class="language-{{ snippet.language }}">{{ snippet.code | e }}</code></pre>
         {% endfor %}

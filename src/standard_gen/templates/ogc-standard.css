@@ -215,3 +215,17 @@ footer {
   color: #777;
   text-align: center;
 }
+
+/* Figures */
+figure {
+  margin: 1.5em auto;
+  text-align: center;
+}
+figure img {
+  max-width: 100%;
+  height: auto;
+}
+figcaption {
+  margin-top: 0.5em;
+  font-weight: bold;
+}
