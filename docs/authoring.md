@@ -343,6 +343,15 @@ requirements:
 ![Classes of the model](assets/classes.svg)
 ```
 
+`_sources/model/assets/classes.svg` — the image must exist, or the run aborts:
+
+```xml
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="60">
+  <rect x="10" y="10" width="180" height="40" fill="none" stroke="black"/>
+  <text x="100" y="35" text-anchor="middle">Feature</text>
+</svg>
+```
+
 Run `bblocks-postprocess` (which runs the plugin), then open
 `standards/core/index.html`; `standards/core/report.json` shows how each block was used.
 

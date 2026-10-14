@@ -39,135 +39,20 @@ with requirements, conformance class table, and an abstract test suite annex.
 See [docs/authoring.md](docs/authoring.md) for the full authoring guide: `standards.yaml`,
 `requirements.yaml`, `terms.yaml`, `references.yaml`, figures, and a worked example.
 
-## Installation
+## Usage as a bblocks-postprocess build plugin
 
-```bash
-git clone https://github.com/ogcincubator/bblocks-specgen.git
-cd bblocks-specgen
-python -m venv venv
-venv/bin/pip install -e .
-```
+The recommended way to use `bblocks-specgen` is as a
+[build plugin](https://ogcincubator.github.io/bblocks-docs/create/build-plugins)
+of `bblocks-postprocess`: the standards are generated as part of the normal register build,
+with no separate step to run.
 
-## Usage
+### Setup
 
-First, run `bblocks-postprocess` in your Building Blocks repository to produce a compiled
-`register.json` (typically at `build-local/register.json`). The repository must also have a
-`standards.yaml` at the root defining the standards to generate (read directly by this tool,
-not by `bblocks-postprocess`).
-
-```bash
-venv/bin/bblocks-specgen --register path/to/build-local/register.json
-```
-
-### `standards.yaml`
-
-A list of standards (or a mapping with a top-level `standards` list). Each entry requires:
-
-- `id` — unique; letters, digits, `_` and `-` only. Used as the output folder name.
-- `prefix` — the BB identifier prefix whose blocks make up this standard.
-- `title`
-
-plus the metadata fields already supported (`base-uri`, `req-uri-template`, `conf-uri-template`,
-`clauses`, `doc-number`, etc.).
-
-### How a block becomes a clause
-
-Which blocks form a standard is decided by `prefix` and the `clauses` list. How each one is
-rendered is decided from its content, not from a `standards.yaml` entry:
-
-1. `itemClass: terms` / `references` → terms / references clause.
-2. Otherwise, a block that has a `requirements.yaml` next to its `description.md` is a
-   **requirements class**, whatever its `itemClass` (e.g. a `model` block).
-3. Anything else is a prose clause (`description.md`).
-
-`requirements.yaml` may start with `class-id: <id>`, the segment used in the `/req/<id>` and
-`/conf/<id>` URIs. If omitted, it defaults to the block identifier with the standard's `prefix`
-removed (dots become `/`). To keep requirements grouped under a namespace in the register
-(e.g. `<prefix>.requirements.core`) without that group leaking into the class URIs, set
-`class-id-prefix: <prefix>.requirements.` on the standard in `standards.yaml` (a full identifier prefix, which must start with `prefix`): `<prefix>.requirements.core`
-then gets the class id `core`. An explicit `class-id` always wins.
-
-### Figures
-
-An image alone in its paragraph with a caption (`![Caption text](assets/diagram.png)`) is rendered
-as a numbered figure, with the caption below it: "Figure 3 — Caption text" ("Figure A.1" in annexes).
-Captions may contain inline Markdown. An image without a caption, or one inside running text, is
-rendered as a plain `<img>`.
-
-Image paths are resolved relative to the block's source directory. Local images are copied to
-`<id>/assets/<block>/`; a missing image aborts the run. Remote URLs are left as they are.
-
-To refer to a figure from the text, link to the same image path; the link is replaced by a link to
-the figure, whose text is "Figure N" if the link text is empty (link text, if given, is kept):
-
-```markdown
-The classes are shown in [](assets/core.png).
-```
-
-An image is shown only once, where it is first included: if the same image is embedded again
-(in the same block or another), the repeat is omitted and references point to the first. This
-also holds for remote images, which are numbered and referenced the same way but not copied.
-Images in examples (including those pulled in with `import-examples`) are resolved against the
-block the example comes from, and absolute URLs under the register's `baseURL` are mapped back to
-the local file. The `assets/` folder is rebuilt on every run, so images that are no longer used
-disappear.
-
-Because this is an ordinary link, it also works when the Markdown is viewed outside specgen.
-To give a figure a stable anchor, or to disambiguate when the same image is used twice, add an
-explicit id, `![Caption](assets/core.png){#fig-core}`, and link to it with `[](#fig-core)`.
-References can point forward to figures that appear later in the document. A link to an image
-that is not a figure produces a warning.
-
-### Output
-
-Each standard is written to `<build-dir>/<id>/index.html` (even when there is only one), and
-`<build-dir>/index.html` lists the available standards. Each folder also gets a `report.json`
-listing every block that went into the document, the role it was given and why. `<build-dir>` defaults to `standards`.
-Any failure aborts the run without writing the top-level index. Folders of standards that no
-longer exist are removed, but only if this tool created them (they contain a `.specgen` marker).
-
-### Options
-
-| Option | Description |
-|---|---|
-| `--register REGISTER_JSON` | Path to compiled `register.json` **(required)** |
-| `--standards-file STANDARDS_YAML` | Standards definitions (default: `standards.yaml` in the repo root) |
-| `--root-dir DIR` | Repo root (default: the parent of the `register.json` directory) |
-| `--only ID` | Generate only this standard id (repeatable; default: all) |
-| `--build-dir DIR` | Output directory (default: `standards`) |
-| `--extra-register REGISTER_JSON` | Additional compiled `register.json` files to import for cross-register bblock resolution (repeatable) |
-| `-v`, `--verbose` | Enable debug logging |
-
-### Example
-
-```bash
-# From the root of an ogcapi-processes-standard-as-bblocks checkout:
-bblocks-postprocess   # produces build-local/register.json
-
-bblocks-specgen --register build-local/register.json
-
-open standards/index.html
-```
-
-## As a bblocks-postprocess build plugin
-
-`standard_gen.plugin.SpecgenBuildPlugin` runs the same generation as a
-[build (lifecycle-hook) plugin](https://github.com/opengeospatial/bblocks-postprocess-action/blob/develop/docs/implemented/build-lifecycle-hooks.md),
-firing at `after_register` — once, with the assembled register just before it is
-written to `register.json` (and before semantic uplift) — instead of being invoked by
-hand afterward. The hook returns the register with a top-level `standards` list added
-(`id`, `title`, `version`, `status`, `doc-number`, `path` relative to the repository root,
-and `url` when the register has a `baseURL`), so the published `register.json` is an
-index of the generated standards. `Assembler`/`Renderer` are unchanged; the
-CLI and the plugin both funnel through the same `standard_gen.generate.generate()`
-entry point, so behavior is identical either way.
-
-Requires a `v1.*.*`-or-later `bblocks-postprocess` release with build-plugin
-support (see that repo's CLAUDE.md "Releasing" section — the mechanism only
-reaches `full@v1`/`postprocess@v1` consumers once a release tag has shipped).
-
-Declare it in the register repo's `bblocks-config.yaml`. All `config` keys are optional
-(the values shown are the defaults); `config` requires `bblocks-postprocess` v1.1.8 or later:
+1. Add a `standards.yaml` at the root of your Building Blocks repository defining the
+   standards to generate (see the [authoring guide](docs/authoring.md#standardsyaml)). It is read directly
+   by this tool, not by `bblocks-postprocess`.
+2. Declare the plugin in the repository's `bblocks-config.yaml`. All `config` keys are
+   optional (the values shown are the defaults):
 
 ```yaml
 plugins:
@@ -181,5 +66,73 @@ plugins:
         extra-registers: []              # register.json URLs or paths to import
 ```
 
-Unknown config keys or wrong types abort the run. The standards definitions are read from
-`standards-file` (see [`standards.yaml`](#standardsyaml) above), not from `register.json`.
+Unknown config keys or wrong types abort the run. `config` requires `bblocks-postprocess`
+v1.1.8 or later.
+
+### How it runs
+
+`standard_gen.plugin.SpecgenBuildPlugin` fires at `after_register` — once, with the
+assembled register just before it is written to `register.json` (and before semantic
+uplift). The hook returns the register with a top-level `standards` list added (`id`,
+`title`, `version`, `status`, `doc-number`, `path` relative to the repository root, and
+`url` when the register has a `baseURL`), so the published `register.json` is an index of
+the generated standards.
+
+The CLI and the plugin both funnel through the same `standard_gen.generate.generate()`
+entry point, so behavior is identical either way.
+
+### Output
+
+Each standard is written to `<build-dir>/<id>/index.html` (even when there is only one), and
+`<build-dir>/index.html` lists the available standards. Each folder also gets a `report.json`
+listing every block that went into the document, the role it was given and why. `<build-dir>` defaults to `standards`.
+Any failure aborts the run without writing the top-level index. Folders of standards that no
+longer exist are removed, but only if this tool created them (they contain a `.specgen` marker).
+
+## Running as a standalone CLI
+
+The same generation can be run by hand against an already-compiled `register.json`, which is
+handy for iterating locally or for repositories that don't use the plugin. Unlike the plugin,
+the CLI does not add the `standards` index to `register.json`.
+
+### Installation
+
+```bash
+git clone https://github.com/ogcincubator/bblocks-specgen.git
+cd bblocks-specgen
+python -m venv venv
+venv/bin/pip install -e .
+```
+
+### Usage
+
+First, run `bblocks-postprocess` in your Building Blocks repository to produce a compiled
+`register.json` (typically at `build-local/register.json`). The repository must also have a
+`standards.yaml` at the root (see the [authoring guide](docs/authoring.md#standardsyaml)).
+
+```bash
+venv/bin/bblocks-specgen --register path/to/build-local/register.json
+```
+
+### Options
+
+| Option | Plugin `config` key | Description |
+|---|---|---|
+| `--register REGISTER_JSON` | — | Path to compiled `register.json` **(required)** |
+| `--standards-file STANDARDS_YAML` | `standards-file` | Standards definitions (default: `standards.yaml` in the repo root) |
+| `--root-dir DIR` | — | Repo root (default: the parent of the `register.json` directory) |
+| `--only ID` | `only` | Generate only this standard id (repeatable; default: all) |
+| `--build-dir DIR` | `build-dir` | Output directory (default: `standards`) |
+| `--extra-register REGISTER_JSON` | `extra-registers` | Additional compiled `register.json` files to import for cross-register bblock resolution (repeatable) |
+| `-v`, `--verbose` | — | Enable debug logging |
+
+### Example
+
+```bash
+# From the root of an ogcapi-processes-standard-as-bblocks checkout:
+bblocks-postprocess   # produces build-local/register.json
+
+bblocks-specgen --register build-local/register.json
+
+open standards/index.html
+```
