@@ -1,4 +1,5 @@
 from __future__ import annotations
+import re
 from dataclasses import dataclass, field
 from typing import Optional, Any
 
@@ -8,6 +9,29 @@ class AppliesTo:
     bblock: str
     json_path: Optional[str] = None
     terms: list[str] = field(default_factory=list)
+    # False: only link the block, without the property/ontology table
+    table: bool = True
+
+
+# Kinds of normative statement (ModSpec), with the URI path segment and the
+# HTML anchor prefix of each.
+STATEMENT_KINDS = {
+    'requirement': {'label': 'Requirement', 'segment': 'req', 'anchor': 'req'},
+    'recommendation': {'label': 'Recommendation', 'segment': 'rec', 'anchor': 'rec'},
+    'permission': {'label': 'Permission', 'segment': 'per', 'anchor': 'per'},
+}
+
+
+# Options of the ModSpec tables ('modspec' in standards.yaml):
+#   statement-label  header of the row of a statement that has no parts
+#   singular-labels  "Prerequisite", "Normative statement", "Conformance test"
+#                    when there is only one
+#   obligation-row   show the "Obligation" row of requirements class tables
+MODSPEC_DEFAULTS = {
+    'statement-label': 'A',
+    'singular-labels': False,
+    'obligation-row': True,
+}
 
 
 @dataclass
@@ -31,10 +55,64 @@ class Requirement:
     test_resources: list[TestResource] = field(default_factory=list)
     import_examples: int = 0
     examples: list['Example'] = field(default_factory=list)
+    # 'requirement', 'recommendation' or 'permission' (see STATEMENT_KINDS)
+    kind: str = 'requirement'
+    # Lettered parts (A, B, C...) of the statement, Markdown each; shown
+    # after 'statement' (which then acts as an introduction), if any.
+    parts: list[str] = field(default_factory=list)
+    prerequisites: list[str] = field(default_factory=list)
+    # Further ModSpec rows (Markdown), shown when given: "Label",
+    # "Conditions" and "Description"
+    label_row: Optional[str] = None
+    conditions: Optional[str] = None
+    description: Optional[str] = None
+    # Assigned by the Assembler
+    label: str = ''          # "Requirement 3", "Permission 6/1"...
+    display_id: str = ''     # identifier as shown (URI, or relative to base-uri)
 
     @property
     def id_slug(self) -> str:
         return self.id.replace('/', '-').replace(' ', '-')
+
+    @property
+    def kind_label(self) -> str:
+        return STATEMENT_KINDS.get(self.kind, STATEMENT_KINDS['requirement'])['label']
+
+    @property
+    def anchor(self) -> str:
+        prefix = STATEMENT_KINDS.get(self.kind, STATEMENT_KINDS['requirement'])['anchor']
+        return f'{prefix}-{self.id_slug}'
+
+
+@dataclass
+class TestRequirementRef:
+    """A requirement referenced by an abstract test."""
+    text: str                      # identifier shown (as written, or the resolved one)
+    anchor: Optional[str] = None   # in-document anchor when it could be resolved
+    label: str = ''                # "Requirement 6" when resolved and no explicit text
+
+
+@dataclass
+class AbstractTest:
+    """An explicitly authored abstract test (abstract-tests in requirements.yaml)."""
+    id: str
+    uri: str
+    purpose: str = ''
+    method: str = ''
+    # [{'ref': id / identifier / URI, 'text': optional text shown instead}]
+    requirement_refs: list[dict] = field(default_factory=list)
+    prerequisites: list[str] = field(default_factory=list)
+    tested_by: list[str] = field(default_factory=list)
+    test_resources: list[TestResource] = field(default_factory=list)
+    bblock_id: Optional[str] = None
+    # Assigned by the Assembler
+    label: str = ''
+    display_id: str = ''
+    requirements: list[TestRequirementRef] = field(default_factory=list)
+
+    @property
+    def anchor(self) -> str:
+        return 'ats-' + self.id.replace('/', '-').replace(' ', '-')
 
 
 @dataclass
@@ -84,6 +162,25 @@ class ReqClass:
     depends_on: list[Dependency] = field(default_factory=list)
     test_resources: list[TestResource] = field(default_factory=list)
     examples: list[Example] = field(default_factory=list)
+    # Title of the requirements class table (default: the block name)
+    title: str = ''
+    obligation: str = 'requirement'
+    abstract_tests: list[AbstractTest] = field(default_factory=list)
+    # True when requirements.yaml lists its abstract tests, even none
+    # ('abstract-tests: []'): no tests are then generated for the class
+    tests_listed: bool = False
+    conf_title: str = ''
+    conf_subject: str = ''
+    conf_prerequisites: list[str] = field(default_factory=list)
+    # Assigned by the Assembler
+    label: str = ''               # "Requirements class 1"
+    conf_label: str = ''          # "Conformance class A.1"
+    display_order: list[Requirement] = field(default_factory=list)
+    unplaced: list[Requirement] = field(default_factory=list)
+
+    @property
+    def conf_anchor(self) -> str:
+        return 'conf-' + re.sub(r'[^A-Za-z0-9]+', '-', self.conf_class_uri.rstrip('/').split('/conf/')[-1]).strip('-')
 
 
 @dataclass
@@ -100,6 +197,10 @@ class Reference:
     doc_id: Optional[str] = None
     uri: Optional[str] = None
     date: Optional[str] = None
+    # Full citation (Markdown); replaces the doc-id/title/date rendering
+    citation: Optional[str] = None
+    # HTML id of the entry, so that the text can link to it
+    anchor: Optional[str] = None
 
 
 @dataclass
@@ -126,6 +227,7 @@ class ReferencesClause:
     normative: list[Reference] = field(default_factory=list)
     informative: list[Reference] = field(default_factory=list)
     preamble_md: str = ""
+    sort: bool = True
 
 
 @dataclass
@@ -136,6 +238,27 @@ class ConformanceClause:
 @dataclass
 class AnnexA:
     entries: list[ATSEntry] = field(default_factory=list)
+    # Explicit mode: the classes' abstract-tests (plus the annex block's own
+    # tests), laid out by the annex block's description.md if one is given.
+    explicit: bool = False
+    req_classes: list[ReqClass] = field(default_factory=list)
+    tests: list[AbstractTest] = field(default_factory=list)
+    description_md: str = ''
+    bblock_id: Optional[str] = None
+    # Assigned by the Assembler: classes and tests not placed by a marker
+    unplaced_classes: list[ReqClass] = field(default_factory=list)
+    unplaced_tests: dict = field(default_factory=dict)   # class bblock_id (or None) -> [AbstractTest]
+
+
+@dataclass
+class ClauseEntry:
+    """A clause as listed in standards.yaml, with its per-entry options."""
+    content: Any
+    title: Optional[str] = None      # overrides the block name as clause title
+    numbered: bool = True
+    preface: bool = False
+    # 0 for a clause, 1 for a subclause listed under a clause's 'subclauses', ...
+    depth: int = 0
 
 
 @dataclass
@@ -143,15 +266,26 @@ class SubSection:
     title: str
     anchor: str
     level: int  # normalized heading level (3 = top-level below the section h2)
+    number: str = ''
 
 
 @dataclass
 class Section:
-    number: str       # "1", "2", "A", etc.
+    number: str       # "1", "2", "A", "III", or "" when unnumbered
     title: str
     anchor: str
     content: Any      # one of the clause types above
     subsections: list['SubSection'] = field(default_factory=list)
+    kind: str = 'clause'   # 'preface', 'clause' or 'annex'
+    normative: bool = True
+    # A subclause (8.1) is a section of depth 1, following its parent clause
+    # (8) in StandardDocument.sections; it is listed under it in the contents.
+    depth: int = 0
+
+    @property
+    def level(self) -> int:
+        """HTML heading level of the section title."""
+        return 2 + self.depth
 
 
 @dataclass
@@ -170,6 +304,27 @@ class StandardMetadata:
     keywords: list[str]
     abstract: str
     boilerplate: dict
+    rec_uri_template: str = '{base-uri}/{status}rec/{id}'
+    per_uri_template: str = '{base-uri}/{status}per/{id}'
+    ats_uri_template: str = '{base-uri}/{status}conf/{id}'
+    # 'classic' (default) or 'ogc': ModSpec tables, document-wide statement
+    # numbering and numbered subclauses, as in published OGC documents.
+    layout: str = 'classic'
+    external_id: str = ''
+    doc_subtype: str = ''
+    submission_date: Optional[str] = None
+    approval_date: Optional[str] = None
+    # Preface entries make the cover skip the abstract/keywords they render
+    preface_autos: list[str] = field(default_factory=list)
+    # ModSpec table options ('modspec' in standards.yaml), see MODSPEC_DEFAULTS
+    modspec: dict = field(default_factory=dict)
+
+    def modspec_option(self, name: str):
+        return self.modspec.get(name, MODSPEC_DEFAULTS[name])
+
+    @property
+    def ogc_layout(self) -> bool:
+        return self.layout == 'ogc'
 
 
 @dataclass

@@ -33,6 +33,7 @@ class Resolver:
         if self._base_url and not self._base_url.endswith('/'):
             self._base_url += '/'
         self._source_dir = source_dir
+        self._fetched: dict[str, str] = {}
 
         # Index all local bblocks by identifier
         self._local_bblocks: dict[str, dict] = {
@@ -52,24 +53,43 @@ class Resolver:
     def _status_token(self) -> str:
         return 'draft/' if self._meta.status.lower() == 'draft' else ''
 
-    def req_uri(self, req_id: str) -> str:
+    def _expand(self, template: str, ident: str) -> str:
         return (
-            self._meta.req_uri_template
+            template
             .replace('{base-uri}', self._meta.base_uri)
             .replace('{status}', self._status_token())
-            .replace('{id}', req_id)
+            .replace('{id}', ident)
         )
 
+    def req_uri(self, req_id: str) -> str:
+        return self._expand(self._meta.req_uri_template, req_id)
+
+    def statement_uri(self, kind: str, stmt_id: str) -> str:
+        """URI of a requirement, recommendation or permission."""
+        template = {
+            'recommendation': self._meta.rec_uri_template,
+            'permission': self._meta.per_uri_template,
+        }.get(kind, self._meta.req_uri_template)
+        return self._expand(template, stmt_id)
+
     def conf_uri(self, class_id: str) -> str:
-        return (
-            self._meta.conf_uri_template
-            .replace('{base-uri}', self._meta.base_uri)
-            .replace('{status}', self._status_token())
-            .replace('{id}', class_id)
-        )
+        return self._expand(self._meta.conf_uri_template, class_id)
 
     def ats_uri(self, req_uri: str) -> str:
         return req_uri.replace('/req/', '/ats/')
+
+    def abstract_test_uri(self, test_id: str) -> str:
+        return self._expand(self._meta.ats_uri_template, test_id)
+
+    def display_id(self, uri: str) -> str:
+        """
+        How a statement or test identifier is shown: relative to the
+        standard's base URI in the 'ogc' layout (e.g. /req/core/x), else as is.
+        """
+        base = self._meta.base_uri.rstrip('/')
+        if self._meta.ogc_layout and uri.startswith(base + '/'):
+            return uri[len(base):]
+        return uri
 
     # ------------------------------------------------------------------
     # Local URL → filesystem path
@@ -83,15 +103,25 @@ class Resolver:
         return None
 
     def fetch(self, url: str) -> str:
-        """Fetch content from a URL, using local filesystem when possible."""
+        """
+        Fetch content from a URL, using local filesystem when possible.
+        Cached for the lifetime of the resolver (the document is rendered twice).
+        """
+        if url in self._fetched:
+            return self._fetched[url]
         local = self.local_path(url)
         if local is not None:
             logger.debug("Reading local file %s for URL %s", local, url)
-            return local.read_text(encoding='utf-8')
-        logger.debug("Fetching remote URL %s", url)
-        resp = requests.get(url, timeout=30)
-        resp.raise_for_status()
-        return resp.text
+            text = local.read_text(encoding='utf-8')
+        else:
+            logger.debug("Fetching remote URL %s", url)
+            resp = requests.get(url, timeout=30)
+            resp.raise_for_status()
+            if 'charset' not in resp.headers.get('content-type', ''):
+                resp.encoding = 'utf-8'   # JSON/YAML/Turtle: UTF-8 unless declared
+            text = resp.text
+        self._fetched[url] = text
+        return text
 
     # ------------------------------------------------------------------
     # bblocks:// link resolution
@@ -169,6 +199,19 @@ class Resolver:
             return bb.get('documentation', {}).get('bblocks-viewer', {}).get('url')
         return None
 
+    def find_bblock_by_schema_url(self, url: str) -> Optional[str]:
+        """
+        Identifier of the block whose source or annotated schema is at url
+        (http and https alike), local blocks first, or None.
+        """
+        key = _url_key(url)
+        for bblocks in (self._local_bblocks, self._imported_bblocks):
+            for identifier, bb in bblocks.items():
+                urls = [bb.get('sourceSchema'), *(bb.get('schema') or {}).values()]
+                if any(isinstance(u, str) and _url_key(u) == key for u in urls):
+                    return identifier
+        return None
+
     def get_bblock_schema(self, identifier: str) -> Optional[dict]:
         bb = self.get_bblock(identifier)
         if not bb:
@@ -197,6 +240,10 @@ class Resolver:
         except Exception as e:
             logger.warning("Could not fetch ontology for %s: %s", identifier, e)
             return None
+
+
+def _url_key(url: str) -> str:
+    return re.sub(r'^https?://', '', url)
 
 
 def _slugify(s: str) -> str:

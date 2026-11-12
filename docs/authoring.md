@@ -124,7 +124,7 @@ Plain Markdown. Notes:
   you would normally, starting with `#` or `##`.
 - **Links to other blocks:** `[text](bblocks://<identifier>)` links to the block's clause if it
   is in this document, or to its page in the viewer if it comes from an imported register.
-- **Figures:** see below.
+- **Figures** and **includes** (schemas or other files shown verbatim): see below.
 - The Markdown dialect is CommonMark plus tables.
 
 ### Figures
@@ -157,6 +157,52 @@ Details:
   `![Caption](assets/core.svg){#fig-core}` and refer to it with `[](#fig-core)`.
 - References may point forward. A link to an image that is not a figure produces a warning.
 - Prefer SVG over PNG when you have both.
+
+### Including schemas and other files
+
+A fenced code block with an `include=` option, and no content, is filled at build time with
+the content of a file, so that a schema published by a building block appears in the document
+without being copied into `description.md` (the equivalent of AsciiDoc's
+`include::openapi/schemas/link.yaml[]`):
+
+````markdown
+```yaml include=bblocks://ogc.api.common.part1.schemas.link
+```
+````
+
+The first word is the language (it sets the `language-…` class of the code block, as in any
+fence). `include=` takes:
+
+| Value | Includes |
+|---|---|
+| `bblocks://<identifier>` | the block's schema, as written by its authors (`sourceSchema` in the register) |
+| `bblocks://<identifier>` with `schema=annotated` | the block's annotated schema from the build (`schema` in the register: the JSON one if the language is `json`, the YAML one otherwise). It carries the semantic annotations (`x-jsonld-*`) and absolute `$ref`s |
+| an absolute URL | that URL (mapped to the local file when under the register's `baseURL`) |
+| a relative path | a file relative to the block's own source directory, as for images |
+
+The block can be local or come from an imported register. The included text is shown
+verbatim (escaped, never parsed as Markdown), so YAML `#` comments do not become headings.
+An include that cannot be resolved (unknown block, block without that schema, missing file,
+failed download) aborts the run. Content inside the fence is replaced, with a warning.
+
+**Link to the defining building block.** The code block is followed by a line
+"Building block: <identifier>", linked to the block's clause if it is in this document, or to
+its page in the viewer if it comes from an imported register. The block is:
+
+- for `include=bblocks://<identifier>`, that block;
+- for a URL, the block whose source or annotated schema is at that URL (`http` and `https`
+  alike), if any;
+- `bblock=<identifier>` sets it explicitly (for instance when including the official copy of a
+  schema that a block republishes), and `bblock=none` removes the line.
+
+````markdown
+```yaml include=https://schemas.opengis.net/ogcapi/common/part1/1.0/openapi/schemas/landingPage.yaml bblock=ogc.api.common.part1.schemas.landingPage
+```
+````
+
+A caption is ordinary Markdown next to the block. Pair the include with a requirement's
+`applies-to` (which renders the property table and links to the block) when the schema is
+normative for that requirement.
 
 ## Terms: `terms.yaml`
 
@@ -252,6 +298,163 @@ Dots become `/`. Use `class-id-prefix` to keep requirements grouped in the regis
 group leaking into URIs: with `prefix: my.std.part1` and
 `class-id-prefix: my.std.part1.requirements.`, the block `my.std.part1.requirements.core` gets
 the class id `core`. `class-id-prefix` must start with `prefix`.
+
+### Recommendations, permissions and lettered parts
+
+A `requirements.yaml` entry can also be a recommendation or a permission (ModSpec), and can be
+split into lettered parts (A, B, C…), as in published OGC documents:
+
+```yaml
+requirements:
+  - id: core/deploy-body              # → {req-uri-template}: …/req/core/deploy-body
+    parts:
+      - The body SHALL contain …
+      - The `Content-Type` header SHALL …
+  - id: core/deploy-body              # same id is fine for a different type
+    type: permission                  # requirement (default) | recommendation | permission
+    statement: A server MAY …         # → {per-uri-template}: …/per/core/deploy-body
+  - id: cwl/multipart
+    type: permission
+    prerequisites: [RFC 2387 (The MIME Multipart/Related Content-type)]
+    statement: Introduction shown as "Statement" when there are parts.
+    parts: [A server MAY …, Parts SHOULD …]
+```
+
+A statement can also carry the ModSpec rows `label`, `conditions` and `description` (Markdown),
+shown as "Label", "Conditions" and "Description" before its parts.
+
+`level` defaults to SHALL, SHOULD and MAY respectively. URIs come from `rec-uri-template` and
+`per-uri-template` (defaults `{base-uri}/{status}rec/{id}` and `{base-uri}/{status}per/{id}`).
+`applies-to: {bblock: …, table: false}` links the block without adding its property table (e.g.
+when the statement already quotes the schema). Other class-level keys: `title` (title of the
+requirements class table, default: the block name), `obligation` (default `requirement`).
+
+### Placing the class table and statements in the text
+
+By default the class table comes first and all statements follow the intro text, under a
+"Requirements" heading. Markers on their own line in `description.md` place them instead:
+
+```markdown
+## Overview
+<!-- requirements-class -->
+…
+## Deploy
+<!-- requirement: core/deploy-body -->
+<!-- permission: core/deploy-body -->
+<!-- recommendation: core/deploy-body-ogcapppkg -->
+```
+
+Statements without a marker still go under the "Requirements" heading (which is omitted when
+every statement is placed). Statements are numbered in display order.
+
+A statement marker can also be put in another clause: a prose clause, a preface clause or the
+Annex A block (for example a recommendation of the "Job list" class shown in the security
+considerations). The statement is then shown there instead, and numbered there: in Annex A it
+gets an annex number ("Requirement A.1"). Its class table still lists it.
+
+### Explicit abstract tests
+
+Instead of one generated Annex A entry per requirement, a class can list its abstract tests:
+
+```yaml
+conformance-class:
+  title: Deploy, Replace, Undeploy   # default: the block name
+  subject: …                         # optional
+abstract-tests:
+  - id: dru/deploy-post-op           # → {ats-uri-template} (default {base-uri}/{status}conf/{id})
+    requirement: deploy-replace-undeploy/deploy-post-op   # id, identifier (/req/…) or URI; or a list
+    purpose: Validate that …
+    method: |
+      1. Issue an HTTP POST request …
+    tested-by: [deploy-success]      # optional, from the block's tests.yaml
+  - id: dru/other
+    requirement: {ref: deploy-replace-undeploy/x, text: /req/shown/as/written}
+```
+
+`conformance-class` can also give `prerequisites` (Markdown, one per entry). `abstract-tests: []`
+says that the class has no abstract tests: none are then generated for it.
+
+A requirement reference that resolves is linked (and shown as "Requirement N: /req/…" in the
+`ogc` layout unless `text` is given); one that does not is shown as written, with a warning.
+To lay out the annex, give it a block: `{auto: annex-a, bblock: my.std.annexes.ats}`. Its
+`description.md` is the annex text, with `<!-- conformance-class: <class block id> -->` and
+`<!-- abstract-test: <id> -->` markers; an optional `abstract-tests.yaml` (`abstract-tests:` list)
+next to it holds tests that belong to no conformance class. As soon as one class has
+abstract tests (or the annex has a block), classes without any get one generated test per
+requirement.
+
+## Document layout
+
+### Preface, clause titles and unnumbered clauses
+
+```yaml
+preface:                          # before clause 1, numbered I, II, III…
+  - auto: abstract                # the 'abstract' (Markdown); no longer shown on the cover
+  - auto: keywords
+  - bblock: my.std.clauses.security
+clauses:
+  - bblock: my.std.requirements.core
+    title: Requirements Class “Core”      # overrides the block name
+  - bblock: my.std.annexes.bibliography
+    numbered: false                       # e.g. a closing Bibliography
+```
+
+A clause can list `subclauses`, rendered as its subclauses after its own text: a group clause
+"10" whose `description.md` has an "Overview" heading (10.1) gets 10.2, 10.3… for the listed
+blocks, typically requirements classes:
+
+```yaml
+clauses:
+  - bblock: my.std.clauses.encodings       # its description.md: "# Overview" -> 10.1
+    subclauses:
+      - bblock: my.std.requirements.json   # 10.2
+        title: Requirements Class “JSON”
+      - bblock: my.std.requirements.html   # 10.3
+```
+
+In `terms.yaml` and `references.yaml`, `sort: false` keeps the order of the file. A reference
+can give its full `citation` (Markdown) instead of `doc-id`/`title`/`date`, and an `anchor` (the
+HTML id of the entry) so that the text can link to it: `[OGC 18-062r2](#OAProc-1)`.
+
+### `layout: ogc`
+
+`layout: ogc` in a standard's entry renders it like a published OGC (Metanorma) document:
+
+- statements, requirements classes, conformance classes and abstract tests as ModSpec tables
+  (Identifier, Included in, A/B/C parts…), identifiers shown relative to `base-uri`
+  (`/req/core/x`);
+- statements numbered across the document per kind (Requirement 1…n, Permission 1…n);
+- headings in clause text numbered (6.1, 6.1.2…), with `sec-<number>` anchors, so that
+  `[Clause 6.2](#sec-6.2)` links work, preface headings lettered (IV.A); terms rendered as
+  subclauses; a `#` line inside a fenced code block is not a heading;
+- a table of contents listing subclauses down to 6.1.2.3, without the terms;
+- annexes titled "Annex A (normative) …" (`normative: false` → informative);
+- an OGC-style cover (`external-id`, `doc-subtype`, `submission-date`, `approval-date`,
+  `pub-date`, version);
+- its styles in a separate `ogc-layout.css`, copied and linked only for this layout, so that
+  documents in the `classic` layout keep their exact output.
+
+`modspec` adjusts the ModSpec tables to the document being reproduced:
+
+```yaml
+modspec:
+  statement-label: Statement   # header of a statement without parts (default: A)
+  singular-labels: true        # "Prerequisite", "Normative statement", "Conformance test"
+                               # when there is only one (default: false)
+  obligation-row: false        # no "Obligation" row in class tables (default: true)
+```
+
+`boilerplate.notices` (both layouts) replaces the default copyright/patent/license text with
+your own titled Markdown blocks:
+
+```yaml
+boilerplate:
+  copyright-year: 2019
+  notices:
+    - {title: Notice for Drafts, text: "This document is not an OGC Standard. …"}
+```
+
+The default layout (`classic`) is unchanged.
 
 ## Model blocks and ontology blocks as requirements classes
 

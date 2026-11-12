@@ -27,17 +27,25 @@ with requirements, conformance class table, and an abstract test suite annex.
 - [x] Multiple standards per repo — each `standards.yaml` entry (required `id`) is generated to `<build-dir>/<id>/`, with an index page listing them
 - [x] `import-examples: N` on a requirement — pulls up to N examples from the external bblock's `json-full`, appended after any locally defined examples; each source bblock is fetched at most once per requirements class
 - [x] `bblocks://` URIs in `depends-on` — resolved to bblock name and viewer URL automatically from the imported register, no hand-typed title needed
+- [x] Recommendations and permissions (`type:` in `requirements.yaml`), lettered parts (A, B, C…) and prerequisites, with their own URI templates
+- [x] Placement markers in `description.md` for the requirements class table and individual statements
+- [x] Explicit abstract tests and conformance classes (`abstract-tests:`), with an Annex A laid out by its own block
+- [x] Preface clauses (I, II…), clause title overrides, unnumbered clauses, custom boilerplate notices
+- [x] `layout: ogc` — ModSpec tables, document-wide statement numbering, numbered subclauses, OGC-style cover
+- [x] Subclauses (`subclauses:` in `standards.yaml`), e.g. requirements classes grouped under a clause
+- [x] Statements placed in any clause (preface, prose, Annex A, numbered "A.1" there), `modspec` table options, Label/Conditions/Description rows
+- [x] File includes — a fenced code block with `include=bblocks://<id>` (or a URL / relative path) shows a block's schema or any file verbatim, fetched at build time instead of copied into `description.md`, and linked to the building block that defines it
 
 ## Pending
 
 - [ ] Requirements property table — resolve `$ref` chains, handle `allOf`/`oneOf`, show enum values and constraints
 - [ ] `requirements.json` — machine-readable requirements manifest output
-- [ ] Subheading hierarchical numbering (e.g. 7.1, 7.1.1) in the table of contents
+- [ ] Subheading hierarchical numbering (e.g. 7.1, 7.1.1) in the `classic` layout (done in `layout: ogc`)
 - [ ] Unit tests (`test_resolver.py`, `test_assembler.py`)
 - [ ] PDF output via WeasyPrint
 
 See [docs/authoring.md](docs/authoring.md) for the full authoring guide: `standards.yaml`,
-`requirements.yaml`, `terms.yaml`, `references.yaml`, figures, and a worked example.
+`requirements.yaml`, `terms.yaml`, `references.yaml`, figures, includes, and a worked example.
 
 ## Usage as a bblocks-postprocess build plugin
 
